@@ -1,0 +1,413 @@
+<!DOCTYPE html>
+<html lang="es" class="h-full bg-slate-950 text-slate-100">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="theme-color" content="#020617">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <title>Teleprompter Pro Studio</title>
+  <link rel="manifest" href="manifest.json">
+  <link rel="icon" href="icons/icon-192.png">
+  <link rel="apple-touch-icon" href="icons/icon-192.png">
+  <link rel="stylesheet" href="app.css">
+  <style>
+    .app-height { height: 100vh; height: 100dvh; }
+    .no-scrollbar::-webkit-scrollbar { display: none; }
+    .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+    .flip-x { transform: scaleX(-1); }
+    .reading-glow { box-shadow: 0 0 35px rgba(14, 165, 233, 0.25); }
+    .music-font { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; }
+
+    .chord-badge {
+      font-family: inherit; font-size: 0.60em; line-height: 1; font-weight: 800;
+      color: #38bdf8; text-shadow: 0 0 10px rgba(56, 189, 248, 0.55);
+      min-height: 1.15em; user-select: none; white-space: nowrap; display: block; padding-bottom: 2px;
+    }
+    .tag-badge { color: #94a3b8; text-shadow: none; font-weight: 700; }
+
+    .prompter-word {
+      font-weight: inherit; font-size: inherit; letter-spacing: inherit;
+      display: inline-flex; align-items: flex-end; border-radius: 4px; padding: 0 1px;
+      transition: color 0.12s ease, background-color 0.15s ease, opacity 0.12s ease;
+    }
+    .word-upcoming { color: #ffffff !important; opacity: 0.95; }
+    .word-active { color: #38bdf8 !important; background-color: rgba(14, 165, 233, 0.18); text-shadow: 0 0 16px rgba(56, 189, 248, 0.95); opacity: 1; }
+    .word-passed { color: #0284c7 !important; opacity: 0.62; }
+
+    .section-cue {
+      display: block;
+      background: linear-gradient(90deg, rgba(30, 41, 59, 0.92), rgba(15, 23, 42, 0.92));
+      border-left: 4px solid #38bdf8; padding: 8px 14px; margin: 14px 0;
+      border-radius: 6px 10px 10px 6px; font-size: 0.72em; color: #cbd5e1; letter-spacing: 0.04em;
+      border-top: 1px solid rgba(56, 189, 248, 0.2); border-bottom: 1px solid rgba(56, 189, 248, 0.2);
+    }
+    .part-label {
+      display: inline-block; margin: 18px 0 4px; padding: 2px 10px; border-radius: 999px;
+      font-size: 0.42em; letter-spacing: 0.14em; text-transform: uppercase; font-weight: 800;
+      color: #fcd34d; background: rgba(245, 158, 11, 0.12); border: 1px solid rgba(245, 158, 11, 0.4);
+    }
+
+    #band-notes-banner { transition: max-height 0.4s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.25s ease, padding 0.25s ease; max-height: 280px; }
+    #band-notes-banner.banner-collapsed {
+      max-height: 0 !important; opacity: 0 !important; padding-top: 0 !important; padding-bottom: 0 !important;
+      border-bottom-width: 0 !important; pointer-events: none; overflow: hidden;
+    }
+    .guide-drag-handle { touch-action: none; cursor: ns-resize; }
+    #stage-flash-overlay, #stage-hud { pointer-events: none; }
+    #stage-hud { transition: opacity 0.2s ease, transform 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275); }
+
+    body.focus-mode #main-header, body.focus-mode #band-notes-banner, body.focus-mode #stats-panel { display: none !important; }
+    .editor-col > * { flex-shrink: 0; }
+    body.focus-mode #btn-exit-focus { display: flex !important; }
+  </style>
+</head>
+<body id="app-body" class="app-height flex flex-col select-none overflow-hidden font-sans bg-black pb-[env(safe-area-inset-bottom)] relative">
+
+  <div id="stage-flash-overlay" class="absolute inset-0 z-50 border-[6px] border-transparent opacity-0 pointer-events-none transition-all duration-200"></div>
+  <div id="stage-hud" class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-50 bg-slate-900/90 border-2 border-sky-500/70 backdrop-blur-md px-6 py-4 rounded-3xl flex flex-col items-center justify-center gap-1.5 shadow-[0_0_50px_rgba(14,165,233,0.35)] opacity-0 scale-90 pointer-events-none">
+    <div id="hud-icon" class="text-4xl sm:text-5xl font-black text-white">▶</div>
+    <div id="hud-text" class="text-xs sm:text-sm font-bold tracking-widest uppercase font-mono text-sky-300">Play</div>
+  </div>
+
+  <!-- ================= BARRA SUPERIOR ================= -->
+  <header id="main-header" class="bg-slate-900/95 backdrop-blur border-b border-slate-800 z-40 pt-[env(safe-area-inset-top)] shrink-0">
+    <div class="max-w-7xl mx-auto px-2 sm:px-4 py-2 flex flex-wrap items-center justify-between gap-2 text-xs">
+
+      <div class="flex items-center gap-1.5 sm:gap-2">
+        <button id="btn-toggle-play" class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-sky-600 hover:bg-sky-500 text-white font-bold transition active:scale-95 shadow-md shadow-sky-950/50">
+          <svg id="play-icon" class="w-3.5 h-3.5 fill-current" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
+          <svg id="pause-icon" class="w-3.5 h-3.5 fill-current hidden" viewBox="0 0 24 24"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>
+          <span id="play-label">Iniciar</span>
+        </button>
+        <button id="btn-rewind" title="Rebobinar tema (R)" class="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 active:scale-95 transition">
+          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+        </button>
+        <div class="flex items-center gap-1 bg-slate-800/90 px-2 py-1 rounded-lg border border-slate-700" title="Metrónomo visual">
+          <div id="metro-light" class="w-2.5 h-2.5 rounded-full bg-slate-600 transition-colors duration-75"></div>
+          <span id="bpm-display" class="font-mono font-bold text-sky-400 min-w-[28px] text-center">80</span>
+          <span class="text-[9px] text-slate-400 font-mono">BPM</span>
+          <button id="btn-audio-click" class="ml-1 text-[11px] text-slate-400 hover:text-white" title="Activar/Desactivar claqueta">🔈</button>
+        </div>
+      </div>
+
+      <div class="flex items-center gap-1 bg-slate-800/90 px-2 py-1 rounded-lg border border-slate-700">
+        <button id="btn-prev-song" title="Tema anterior (P o [)" class="p-1 text-slate-400 hover:text-white transition">
+          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg>
+        </button>
+        <select id="select-active-song" class="bg-slate-900 text-slate-200 text-xs font-semibold px-2 py-0.5 rounded border border-slate-700 focus:outline-none max-w-[105px] sm:max-w-[190px] truncate cursor-pointer"></select>
+        <span id="song-lang-badge" class="px-1.5 py-0.5 rounded bg-slate-900 border border-slate-700 font-mono text-[10px] text-sky-300">ES</span>
+        <button id="btn-next-song" title="Tema siguiente (N o ])" class="p-1 text-slate-400 hover:text-white transition">
+          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
+        </button>
+        <button id="btn-open-setlist" class="ml-1 flex items-center gap-1 px-2 sm:px-3 py-1 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs transition shadow-md shadow-indigo-950/60 active:scale-95" title="Editar la lista, exportar e importar">
+          <span>📑</span><span id="header-list-name" class="max-w-[70px] sm:max-w-[140px] truncate">Lista</span>
+        </button>
+      </div>
+
+      <div class="flex items-center gap-1.5 bg-slate-800/90 px-2 py-1 rounded-lg border border-slate-700">
+        <span class="text-slate-400 text-[11px] font-medium">Tono:</span>
+        <button id="btn-transpose-down" title="Bajar semitono (-)" class="w-5 h-5 flex items-center justify-center rounded bg-slate-700 hover:bg-slate-600 text-sky-400 font-black">-</button>
+        <span id="transpose-indicator" class="font-mono text-sky-400 font-bold min-w-[24px] text-center text-xs">0</span>
+        <button id="btn-transpose-up" title="Subir semitono (+)" class="w-5 h-5 flex items-center justify-center rounded bg-slate-700 hover:bg-slate-600 text-sky-400 font-black">+</button>
+        <button id="btn-toggle-chords" class="ml-1 px-1.5 py-0.5 rounded bg-sky-950 border border-sky-500/40 text-sky-300 font-mono font-bold text-[10px] transition">Acordes: ON</button>
+        <button id="btn-header-toggle-guide" class="ml-1 px-2 py-0.5 rounded bg-amber-950/80 hover:bg-amber-900 border border-amber-500/50 text-amber-300 font-semibold text-[10px] transition" title="Mostrar u ocultar la guía (G)">📌 Guía</button>
+      </div>
+
+      <div class="flex items-center gap-1.5 sm:gap-2">
+        <button id="btn-toggle-voice" class="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-sky-600 text-white font-semibold text-xs border border-sky-400/40">
+          <span class="relative flex h-2 w-2">
+            <span id="mic-ping" class="hidden animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-75"></span>
+            <span id="mic-dot" class="relative inline-flex rounded-full h-2 w-2 bg-slate-400"></span>
+          </span>
+          <span id="voice-mode-label">Voz: ON</span>
+        </button>
+        <div class="flex items-center gap-1 bg-slate-800 px-1.5 py-1 rounded-lg border border-slate-700 text-xs">
+          <span class="text-slate-400 text-[10px]">Aa</span>
+          <input type="range" id="font-slider" min="20" max="60" step="2" value="32" class="w-12 sm:w-16 accent-sky-500 cursor-pointer">
+          <span id="font-val" class="font-mono text-[10px] text-slate-300 w-4 text-right">32</span>
+        </div>
+        <button id="btn-mirror-h" title="Espejo horizontal (M)" class="px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 font-mono text-xs">↔</button>
+        <button id="btn-fullscreen" title="Pantalla completa (F)" class="p-1.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700">
+          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8V4m0 0h4M4 4l5 5m11-5h-4m4 0v4m0 0l-5-5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4"/></svg>
+        </button>
+        <button id="btn-settings" title="Ajustes" class="px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 text-xs">⚙</button>
+      </div>
+    </div>
+    <div class="w-full bg-slate-800 h-1">
+      <div id="progress-bar" class="bg-gradient-to-r from-sky-500 via-cyan-400 to-indigo-500 h-full w-0 transition-all duration-150"></div>
+    </div>
+  </header>
+
+  <!-- ================= GUÍA / NOTAS DE BANDA ================= -->
+  <div id="band-notes-banner" class="w-full bg-gradient-to-r from-amber-950/90 via-slate-950 to-amber-950/90 backdrop-blur border-b border-amber-500/40 text-amber-200 text-xs px-3 sm:px-6 py-2.5 shrink-0 z-30 relative shadow-lg overflow-y-auto no-scrollbar">
+    <div class="max-w-5xl mx-auto flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 sm:gap-4">
+      <div class="flex items-start gap-2 flex-1 min-w-0">
+        <span class="px-1.5 py-0.5 rounded bg-amber-500/25 text-amber-300 font-mono font-bold text-[10px] uppercase border border-amber-500/50 shrink-0 mt-0.5">📌 GUÍA</span>
+        <div id="band-notes-text" class="font-medium text-slate-200 text-xs sm:text-sm leading-relaxed whitespace-normal break-words">Cargando guía del tema...</div>
+      </div>
+      <button id="btn-toggle-notes-view" class="self-end sm:self-center shrink-0 px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-amber-300 border border-amber-500/30 text-[11px] font-semibold transition">Ocultar</button>
+    </div>
+  </div>
+
+  <!-- ================= ESCENARIO ================= -->
+  <main id="teleprompter-stage" class="relative flex-1 bg-black overflow-hidden flex flex-col">
+    <button id="btn-exit-focus" class="hidden absolute top-4 right-4 z-40 bg-slate-900/90 border border-slate-700 text-slate-200 px-3 py-1.5 rounded-full text-xs font-semibold shadow-xl items-center gap-1.5 backdrop-blur">
+      <span>✕</span><span>Mostrar controles</span>
+    </button>
+
+    <div id="guide-overlay" class="absolute left-0 right-0 z-20 flex items-center justify-between px-2 sm:px-6 -translate-y-1/2 pointer-events-none" style="top: 32%;">
+      <div id="handle-left" class="guide-drag-handle pointer-events-auto flex items-center gap-1 p-2" title="Arrastrá para mover la franja">
+        <div class="w-0 h-0 border-y-[12px] border-y-transparent border-l-[18px] border-l-sky-500 drop-shadow-[0_0_8px_rgba(14,165,233,0.9)]"></div>
+        <div class="hidden sm:block h-[2px] w-8 bg-gradient-to-r from-sky-500 to-transparent"></div>
+      </div>
+      <div class="flex-1 h-20 bg-sky-500/[0.04] border-y border-sky-500/30 reading-glow rounded"></div>
+      <div id="handle-right" class="guide-drag-handle pointer-events-auto flex items-center gap-1 p-2" title="Arrastrá para mover la franja">
+        <div class="hidden sm:block h-[2px] w-8 bg-gradient-to-l from-sky-500 to-transparent"></div>
+        <div class="w-0 h-0 border-y-[12px] border-y-transparent border-r-[18px] border-r-sky-500 drop-shadow-[0_0_8px_rgba(14,165,233,0.9)]"></div>
+      </div>
+    </div>
+
+    <div id="scroll-wrapper" class="w-full h-full overflow-y-scroll no-scrollbar music-font">
+      <div id="teleprompter-content" class="relative max-w-4xl mx-auto px-4 sm:px-12 text-left text-slate-100 font-bold leading-relaxed"></div>
+    </div>
+
+    <div id="stats-panel" class="absolute bottom-3 left-1/2 -translate-x-1/2 bg-slate-900/90 backdrop-blur border border-slate-800 px-3 sm:px-5 py-1.5 rounded-full text-xs text-slate-400 flex items-center gap-2 sm:gap-3 z-20 shadow-xl max-w-[94vw]">
+      <span id="detected-transcript" class="text-sky-400 font-mono font-medium truncate max-w-[130px] sm:max-w-[180px]">En espera...</span>
+      <button id="btn-learn-chip" class="hidden px-2 py-0.5 rounded-full bg-emerald-700 hover:bg-emerald-600 text-white text-[11px] font-bold whitespace-nowrap">✓ Así se canta</button>
+      <span class="text-slate-700">|</span>
+      <span class="text-slate-400 text-[11px]">Guía:</span>
+      <input type="range" id="guide-pos-slider" min="15" max="70" value="32" class="w-12 sm:w-16 accent-sky-500 h-1 cursor-pointer">
+      <span class="text-slate-700">|</span>
+      <span class="text-[11px] text-slate-400">Vel:</span>
+      <input type="range" id="speed-slider" min="0.5" max="8" step="0.2" value="2.2" class="w-12 sm:w-16 accent-sky-500 h-1 cursor-pointer">
+    </div>
+  </main>
+
+  <!-- ================= VENTANA DE 20 SEGUNDOS ================= -->
+  <div id="autocue-modal" class="fixed inset-0 bg-black/90 backdrop-blur-md z-40 flex items-center justify-center p-3 sm:p-6 hidden">
+    <div class="bg-slate-900/95 border-2 border-sky-500/80 rounded-3xl w-[94vw] sm:w-[88vw] max-w-3xl p-5 sm:p-8 text-center shadow-2xl space-y-4 sm:space-y-6">
+      <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+        <div class="flex items-center gap-2">
+          <span class="text-2xl sm:text-3xl">🏁</span>
+          <h3 class="text-base sm:text-xl font-black text-white uppercase tracking-wider">Tema finalizado</h3>
+        </div>
+        <span id="autocue-status-pill" class="font-mono text-xs text-sky-400 bg-sky-950 px-3 py-1 rounded-full border border-sky-500/40">Cuenta activa</span>
+      </div>
+      <div id="autocue-next-card" class="bg-slate-950 hover:bg-slate-900/80 border border-slate-800 hover:border-sky-500/50 rounded-2xl p-4 sm:p-6 text-left space-y-3 cursor-pointer transition group" title="Tocá para pasar ya a este tema">
+        <div class="flex items-center justify-between">
+          <span class="text-[11px] sm:text-xs font-mono uppercase text-sky-400 font-bold tracking-widest">A continuación:</span>
+          <span class="text-[10px] text-slate-400 group-hover:text-sky-300 font-mono hidden sm:inline">Tocar para saltar ahora &rarr;</span>
+        </div>
+        <div id="autocue-next-title" class="text-xl sm:text-3xl font-black text-white leading-snug font-mono break-words">Tema</div>
+        <div class="flex flex-wrap items-center gap-2 pt-1">
+          <span id="autocue-badge-bpm" class="px-2.5 py-1 rounded-lg bg-sky-950/80 text-sky-300 font-mono font-bold text-xs sm:text-sm border border-sky-500/40">80 BPM</span>
+          <span id="autocue-badge-lang" class="px-2.5 py-1 rounded-lg bg-slate-800 text-slate-200 font-mono font-bold text-xs sm:text-sm border border-slate-600">ES</span>
+        </div>
+        <div class="pt-2 border-t border-slate-900">
+          <div class="text-[10px] font-mono uppercase text-amber-400 font-bold">Guía / intro para la banda:</div>
+          <p id="autocue-next-notes" class="text-xs sm:text-sm text-amber-200/90 font-medium leading-relaxed mt-1"></p>
+        </div>
+      </div>
+      <div class="space-y-1.5 text-left">
+        <div class="flex justify-between text-xs sm:text-sm text-slate-400 font-mono">
+          <span>Iniciando automáticamente en:</span>
+          <span id="autocue-countdown" class="font-bold text-sky-400 text-sm sm:text-base">20s</span>
+        </div>
+        <div class="w-full bg-slate-800 h-2.5 rounded-full overflow-hidden">
+          <div id="autocue-bar" class="bg-gradient-to-r from-sky-500 to-indigo-500 h-full w-full transition-all duration-1000 ease-linear"></div>
+        </div>
+      </div>
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2">
+        <button id="btn-autocue-toggle-pause" class="py-3.5 px-5 rounded-xl bg-sky-600 hover:bg-sky-500 text-white font-bold text-xs sm:text-sm shadow-lg active:scale-95 transition flex items-center justify-center gap-2">
+          <span id="autocue-btn-icon">⏸</span><span id="autocue-btn-label">Pausar cuenta (20s)</span>
+        </button>
+        <button id="btn-autocue-back" class="py-3.5 px-5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-semibold text-xs sm:text-sm border border-slate-700 active:scale-95 transition flex items-center justify-center gap-2">
+          <span>⏮</span><span>Regresar al tema anterior</span>
+        </button>
+      </div>
+      <button id="btn-autocue-learn" class="hidden w-full py-2.5 px-4 rounded-xl bg-emerald-800/70 hover:bg-emerald-700 text-emerald-100 font-semibold text-xs sm:text-sm border border-emerald-500/40 transition">✓ Así se canta este tema (guardar como referencia)</button>
+      <div class="text-[11px] text-slate-500 font-mono">Pedal: [Adelante 1 toque] Pausar/Reanudar • [Adelante 2 toques] Pasar ya • [Atrás 1 toque] Regresar</div>
+    </div>
+  </div>
+
+  <!-- ================= EDITOR DE LA LISTA ================= -->
+  <div id="setlist-modal" class="fixed inset-0 bg-black/85 backdrop-blur-md z-50 flex items-center justify-center p-2 sm:p-6 hidden">
+    <div class="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-6xl flex flex-col max-h-[94vh] h-[94vh] shadow-2xl overflow-hidden">
+
+      <div class="px-4 sm:px-6 py-3 border-b border-slate-800 flex flex-wrap items-center justify-between gap-2 bg-slate-950">
+        <div class="flex items-center gap-2 min-w-0">
+          <span class="text-sky-400 text-xl">🎵</span>
+          <div class="min-w-0">
+            <h3 class="font-bold text-slate-100 text-sm sm:text-base truncate">Lista: <span id="editor-list-name" class="text-sky-300"></span></h3>
+            <p id="editor-status" class="text-[10px] sm:text-xs text-slate-400">Sin cambios</p>
+          </div>
+        </div>
+        <div class="flex items-center gap-1.5 flex-wrap">
+          <button id="btn-save-list" class="px-3.5 py-1.5 rounded-lg bg-sky-600 hover:bg-sky-500 text-white font-bold text-xs transition active:scale-95">💾 Guardar cambios</button>
+          <button id="btn-history" class="px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs">🕘 Historial</button>
+          <button id="btn-export-setlist" class="px-2.5 py-1.5 rounded-lg bg-emerald-800 hover:bg-emerald-700 text-white text-xs">⬇ Exportar</button>
+          <label class="px-2.5 py-1.5 rounded-lg bg-indigo-800 hover:bg-indigo-700 text-white text-xs cursor-pointer">⬆ Importar<input type="file" id="input-import-setlist" accept=".json,application/json" class="hidden"></label>
+          <button id="btn-change-list" class="px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs">🔁 Cambiar lista</button>
+          <button id="btn-close-setlist" class="ml-1 text-slate-400 hover:text-white text-2xl leading-none px-1" title="Cerrar">&times;</button>
+        </div>
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-12 flex-1 overflow-y-auto md:overflow-hidden">
+        <div class="md:col-span-4 border-b md:border-b-0 md:border-r border-slate-800 p-3 flex flex-col gap-2 bg-slate-900/50 md:overflow-hidden">
+          <div class="flex items-center justify-between text-xs font-semibold text-slate-400 uppercase">
+            <span>Temas (<span id="song-count">0</span>)</span>
+            <button id="btn-new-song" class="text-sky-400 hover:text-sky-300 font-bold text-xs">+ Agregar tema</button>
+          </div>
+          <div id="songs-list-container" class="flex-1 overflow-y-auto no-scrollbar space-y-1.5 pr-1 max-h-[30vh] md:max-h-none"></div>
+        </div>
+
+        <div class="editor-col md:col-span-8 p-3 sm:p-4 flex flex-col gap-2.5 bg-slate-950/40 md:overflow-y-auto">
+          <div class="grid grid-cols-12 gap-2">
+            <input type="text" id="edit-song-title" class="col-span-12 sm:col-span-7 px-3 py-1.5 bg-slate-900 border border-slate-800 rounded-lg text-slate-100 text-xs font-semibold focus:outline-none focus:border-sky-500" placeholder="Título del tema">
+            <input type="number" id="edit-song-bpm" min="20" max="300" class="col-span-5 sm:col-span-2 px-2 py-1.5 bg-slate-900 border border-slate-800 rounded-lg text-slate-100 text-xs font-mono focus:outline-none focus:border-sky-500" placeholder="BPM">
+            <select id="edit-song-lang" class="col-span-7 sm:col-span-3 px-2 py-1.5 bg-slate-900 border border-slate-800 rounded-lg text-slate-100 text-xs focus:outline-none focus:border-sky-500">
+              <option value="es">Idioma: Español</option>
+              <option value="en">Idioma: Inglés</option>
+            </select>
+          </div>
+
+          <textarea id="edit-song-notes" class="w-full px-3 py-1.5 bg-slate-900 border border-amber-500/30 rounded-lg text-amber-200 text-xs focus:outline-none focus:border-amber-500 resize-none h-14" placeholder="Guía de banda: tono, intro, compases, entradas..."></textarea>
+
+          <div id="learned-row" class="hidden text-[11px] text-emerald-300 bg-emerald-950/40 border border-emerald-600/30 rounded-lg px-3 py-1.5 flex items-center justify-between gap-2">
+            <span>✓ Este dispositivo tiene una referencia "Así se canta" para este tema.</span>
+            <button id="btn-forget-learned" class="text-emerald-200 underline hover:text-white">Borrar referencia</button>
+          </div>
+
+          <!-- Tema antiguo: texto único -->
+          <div id="legacy-editor" class="hidden flex-col gap-1.5">
+            <div class="flex items-center justify-between gap-2">
+              <label class="text-[10px] text-slate-400">Letra con acordes entre corchetes [D] (tema cargado sin partes):</label>
+              <button id="btn-convert-parts" class="text-[11px] px-2 py-1 rounded bg-slate-800 border border-slate-700 text-sky-300 hover:bg-slate-700">Cargar por partes</button>
+            </div>
+            <textarea id="edit-song-content" class="w-full p-2.5 bg-slate-900 border border-slate-800 rounded-lg text-slate-100 music-font text-xs leading-relaxed focus:outline-none focus:border-sky-500 resize-y min-h-[220px]"></textarea>
+          </div>
+
+          <!-- Tema por partes -->
+          <div id="parts-editor" class="flex flex-col gap-2">
+            <div class="text-[10px] text-slate-400">Partes en el orden en que se canta el tema. Acordes entre corchetes, por ejemplo: De [G]vez en cuando</div>
+            <div id="parts-container" class="flex flex-col gap-2"></div>
+            <div class="flex items-center gap-2">
+              <select id="new-part-type" class="px-2 py-1.5 bg-slate-900 border border-slate-700 rounded-lg text-slate-100 text-xs"></select>
+              <button id="btn-add-part" class="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-sky-300 font-bold text-xs">+ Agregar parte</button>
+            </div>
+          </div>
+
+          <div class="flex items-center justify-between pt-2 mt-auto border-t border-slate-800">
+            <button id="btn-delete-song" class="text-rose-400 hover:text-rose-300 text-xs font-medium">Eliminar tema</button>
+            <button id="btn-load-and-exit" class="px-3.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs transition">Cargar en pantalla</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= ABRIR LISTA ================= -->
+  <div id="open-list-modal" class="fixed inset-0 bg-black/95 backdrop-blur-md z-[70] flex items-center justify-center p-4 hidden">
+    <div class="bg-slate-900 border border-sky-500/60 rounded-2xl p-5 sm:p-6 max-w-md w-full shadow-2xl flex flex-col gap-4">
+      <div>
+        <h4 class="text-lg font-black text-white">Abrir lista de la banda</h4>
+        <p class="text-xs text-slate-400 mt-1">Escribí el nombre de la lista (por ejemplo: Rusty Hats 001). Si no existe, se crea nueva.</p>
+      </div>
+      <input type="text" id="input-list-code" class="w-full px-3 py-2.5 bg-slate-950 border border-slate-700 rounded-lg text-slate-100 text-base font-semibold focus:outline-none focus:border-sky-500" placeholder="Nombre de la lista" autocomplete="off">
+      <div id="recent-lists" class="flex flex-wrap gap-1.5"></div>
+      <p id="cloud-state-open" class="text-[11px] text-slate-500"></p>
+      <div class="flex items-center justify-end gap-2">
+        <button id="btn-cancel-open-list" class="py-2 px-4 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-semibold text-xs border border-slate-700">Cancelar</button>
+        <button id="btn-confirm-open-list" class="py-2 px-5 rounded-xl bg-sky-600 hover:bg-sky-500 text-white font-bold text-xs">Abrir lista</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= HISTORIAL ================= -->
+  <div id="history-modal" class="fixed inset-0 bg-black/90 backdrop-blur-md z-[60] flex items-center justify-center p-4 hidden">
+    <div class="bg-slate-900 border border-slate-700 rounded-2xl p-5 max-w-md w-full shadow-2xl flex flex-col gap-3 max-h-[85vh]">
+      <div class="flex items-center justify-between">
+        <h4 class="text-base font-bold text-white">🕘 Historial de la lista</h4>
+        <button id="btn-close-history" class="text-slate-400 hover:text-white text-2xl leading-none">&times;</button>
+      </div>
+      <p class="text-xs text-slate-400">Últimas 5 versiones guardadas. Restaurar reemplaza la lista completa (la versión actual también queda en el historial).</p>
+      <div id="history-list" class="flex-1 overflow-y-auto space-y-2"></div>
+    </div>
+  </div>
+
+  <!-- ================= CAMBIOS SIN GUARDAR ================= -->
+  <div id="unsaved-modal" class="fixed inset-0 bg-black/90 backdrop-blur-md z-[65] flex items-center justify-center p-4 hidden">
+    <div class="bg-slate-900 border border-amber-500/60 rounded-2xl p-5 sm:p-6 max-w-md w-full shadow-2xl flex flex-col gap-4 text-center">
+      <div class="text-3xl">💾</div>
+      <h4 class="text-base font-bold text-white">¿Guardar los cambios en la lista?</h4>
+      <p class="text-xs text-slate-300">Hay cambios sin guardar.</p>
+      <div class="grid grid-cols-1 sm:grid-cols-3 gap-2">
+        <button id="btn-unsaved-save" class="py-2.5 rounded-xl bg-sky-600 hover:bg-sky-500 text-white font-bold text-xs">Guardar</button>
+        <button id="btn-unsaved-discard" class="py-2.5 rounded-xl bg-rose-700 hover:bg-rose-600 text-white font-semibold text-xs">Descartar</button>
+        <button id="btn-unsaved-continue" class="py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-semibold text-xs border border-slate-700">Seguir editando</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= BORRADOR RECUPERADO ================= -->
+  <div id="draft-modal" class="fixed inset-0 bg-black/90 backdrop-blur-md z-[65] flex items-center justify-center p-4 hidden">
+    <div class="bg-slate-900 border border-sky-500/60 rounded-2xl p-5 sm:p-6 max-w-md w-full shadow-2xl flex flex-col gap-4 text-center">
+      <div class="text-3xl">📝</div>
+      <h4 class="text-base font-bold text-white">Hay una edición sin guardar</h4>
+      <p class="text-xs text-slate-300">Quedaron cambios de una edición anterior en este dispositivo (<span id="draft-date"></span>). ¿Querés continuarla?</p>
+      <div class="grid grid-cols-2 gap-2">
+        <button id="btn-draft-continue" class="py-2.5 rounded-xl bg-sky-600 hover:bg-sky-500 text-white font-bold text-xs">Continuar</button>
+        <button id="btn-draft-discard" class="py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-semibold text-xs border border-slate-700">Descartar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= CONFIRMACIÓN GENERAL ================= -->
+  <div id="confirm-modal" class="fixed inset-0 bg-black/90 backdrop-blur-md z-[80] flex items-center justify-center p-4 hidden">
+    <div class="bg-slate-900 border border-rose-500/50 rounded-2xl p-5 sm:p-6 max-w-md w-full shadow-2xl flex flex-col gap-4 text-center">
+      <div class="text-3xl">⚠️</div>
+      <h4 id="confirm-title" class="text-base font-bold text-white"></h4>
+      <p id="confirm-text" class="text-xs text-slate-300"></p>
+      <div class="grid grid-cols-2 gap-2">
+        <button id="btn-confirm-cancel" class="py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-semibold text-xs border border-slate-700">Cancelar</button>
+        <button id="btn-confirm-ok" class="py-2.5 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs">Aceptar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= AJUSTES ================= -->
+  <div id="settings-modal" class="fixed inset-0 bg-black/90 backdrop-blur-md z-[60] flex items-center justify-center p-4 hidden">
+    <div class="bg-slate-900 border border-slate-700 rounded-2xl p-5 max-w-md w-full shadow-2xl flex flex-col gap-4">
+      <div class="flex items-center justify-between">
+        <h4 class="text-base font-bold text-white">⚙ Ajustes de este dispositivo</h4>
+        <button id="btn-close-settings" class="text-slate-400 hover:text-white text-2xl leading-none">&times;</button>
+      </div>
+      <div>
+        <label class="block text-xs font-semibold text-slate-400 mb-1.5">Motor de reconocimiento de voz</label>
+        <select id="select-engine" class="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-lg text-slate-100 text-sm">
+          <option value="vosk">Vosk — sin internet (recomendado)</option>
+          <option value="google">Google — necesita internet y Chrome</option>
+        </select>
+      </div>
+      <div class="space-y-2">
+        <div class="text-xs font-semibold text-slate-400">Modelos de voz sin internet (se descargan una vez)</div>
+        <div class="flex items-center justify-between gap-2 bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs">
+          <span>Español <span id="model-state-es" class="text-slate-500"></span></span>
+          <button data-model="es" class="btn-preload-model px-2 py-1 rounded bg-slate-800 border border-slate-700 text-sky-300">Descargar</button>
+        </div>
+        <div class="flex items-center justify-between gap-2 bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs">
+          <span>Inglés <span id="model-state-en" class="text-slate-500"></span></span>
+          <button data-model="en" class="btn-preload-model px-2 py-1 rounded bg-slate-800 border border-slate-700 text-sky-300">Descargar</button>
+        </div>
+      </div>
+      <p id="cloud-state-settings" class="text-[11px] text-slate-500"></p>
+    </div>
+  </div>
+
+  <div id="toast" class="fixed top-12 left-1/2 -translate-x-1/2 bg-slate-800/95 border border-slate-700 text-slate-100 text-xs px-4 py-1.5 rounded-full shadow-2xl pointer-events-none transition-all duration-300 opacity-0 -translate-y-2 z-[90] max-w-[92vw] text-center"></div>
+
+  <script src="firebase-config.js"></script>
+  <script src="app.js" defer></script>
+</body>
+</html>
