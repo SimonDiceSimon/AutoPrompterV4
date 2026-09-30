@@ -419,8 +419,9 @@ async function openList(name) {
 
   let local = store.get(K.list(id));
   let remote = null;
+  let remoteChecked = false;
   if (cloud.enabled && navigator.onLine) {
-    try { remote = await cloud.getList(id); } catch (e) { console.warn(e); }
+    try { remote = await cloud.getList(id); remoteChecked = true; } catch (e) { console.warn(e); }
   }
 
   let list;
@@ -428,12 +429,14 @@ async function openList(name) {
     list = remote;
   } else if (local) {
     list = local;
+    // Lista creada antes de conectar la nube: se sube para compartirla
+    if (remoteChecked && !remote) store.set(K.pending(id), true);
   } else {
     const seed = legacyDeviceSongs();
     list = { id, name: clean, songs: seed || demoSongs(), updatedAt: new Date().toISOString() };
     if (seed) showToast('Se cargaron los temas que había en este dispositivo');
     saveListLocal(list);
-    await pushListToCloud(list, null);
+    pushListToCloud(list, null);
   }
   list.songs = list.songs.map(normalizeSong);
   if (!list.name) list.name = clean;
@@ -499,7 +502,7 @@ async function commitSongs(newSongs, message) {
   state.currentSongIndex = idx >= 0 ? idx : Math.min(state.currentSongIndex, state.list.songs.length - 1);
   if (!state.isPlaying) renderCurrentSong(); else syncSongSelector();
   showToast(message || 'Cambios guardados');
-  await pushListToCloud(state.list, entry);
+  pushListToCloud(state.list, entry); // se sube en segundo plano; si no hay señal, queda pendiente
 }
 
 async function refreshFromCloud() {
