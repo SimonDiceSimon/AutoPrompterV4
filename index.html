@@ -20,7 +20,7 @@
     .music-font { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; }
 
     .chord-badge {
-      font-family: inherit; font-size: 0.60em; line-height: 1; font-weight: 800;
+      font-family: inherit; font-size: var(--chord-size, 26px); line-height: 1.05; font-weight: 800;
       color: #38bdf8; text-shadow: 0 0 10px rgba(56, 189, 248, 0.55);
       min-height: 1.15em; user-select: none; white-space: nowrap; display: block; padding-bottom: 2px;
     }
@@ -59,6 +59,17 @@
 
     body.focus-mode #main-header, body.focus-mode #band-notes-banner, body.focus-mode #stats-panel { display: none !important; }
     .editor-col > * { flex-shrink: 0; }
+    .chord-preview { background: #000; border: 1px dashed rgba(56,189,248,0.25); border-radius: 8px; padding: 6px 10px; font-family: ui-monospace, Menlo, Consolas, monospace; font-weight: 700; color: #f1f5f9; font-size: 15px; }
+    .chord-preview:empty { display: none; }
+    .chord-preview .pv-line { display: flex; flex-wrap: wrap; align-items: flex-end; margin: 2px 0; }
+    .chord-preview .pv-word { display: inline-flex; align-items: flex-end; margin-right: 0.45em; }
+    .chord-preview .pv-col { display: inline-flex; flex-direction: column; }
+    .chord-preview .pv-chord { color: #38bdf8; font-size: 12px; line-height: 1.1; min-height: 1.1em; }
+    .chord-preview .pv-tag { color: #94a3b8; }
+    .chord-preview .pv-cue { color: #94a3b8; font-size: 12px; font-style: italic; }
+    .chord-preview .pv-title { font-size: 10px; color: #64748b; font-weight: 600; text-transform: uppercase; letter-spacing: .08em; margin-bottom: 2px; }
+    .picker-btn { padding: 4px 9px; border-radius: 8px; border: 1px solid #334155; background: #0f172a; color: #e2e8f0; font-size: 12px; font-weight: 700; font-family: ui-monospace, Menlo, monospace; }
+    .picker-btn.on { background: #0284c7; border-color: #38bdf8; color: #fff; }
     body.focus-mode #btn-exit-focus { display: flex !important; }
   </style>
 </head>
@@ -111,21 +122,27 @@
         <span id="transpose-indicator" class="font-mono text-sky-400 font-bold min-w-[24px] text-center text-xs">0</span>
         <button id="btn-transpose-up" title="Subir semitono (+)" class="w-5 h-5 flex items-center justify-center rounded bg-slate-700 hover:bg-slate-600 text-sky-400 font-black">+</button>
         <button id="btn-toggle-chords" class="ml-1 px-1.5 py-0.5 rounded bg-sky-950 border border-sky-500/40 text-sky-300 font-mono font-bold text-[10px] transition">Acordes: ON</button>
+        <button id="btn-notation" class="px-1.5 py-0.5 rounded bg-slate-900 border border-slate-600 text-slate-200 font-mono font-bold text-[10px] transition" title="Cambiar entre cifrado americano (C, D, E) y latino (Do, Re, Mi)">Cifrado: C</button>
         <button id="btn-header-toggle-guide" class="ml-1 px-2 py-0.5 rounded bg-amber-950/80 hover:bg-amber-900 border border-amber-500/50 text-amber-300 font-semibold text-[10px] transition" title="Mostrar u ocultar la guía (G)">📌 Guía</button>
       </div>
 
-      <div class="flex items-center gap-1.5 sm:gap-2">
-        <button id="btn-toggle-voice" class="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-sky-600 text-white font-semibold text-xs border border-sky-400/40">
+      <div class="flex flex-wrap items-center gap-1.5 sm:gap-2">
+        <button id="btn-toggle-voice" class="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-sky-600 text-white font-semibold text-xs border border-sky-400/40 whitespace-nowrap">
           <span class="relative flex h-2 w-2">
             <span id="mic-ping" class="hidden animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-75"></span>
             <span id="mic-dot" class="relative inline-flex rounded-full h-2 w-2 bg-slate-400"></span>
           </span>
           <span id="voice-mode-label">Voz: ON</span>
         </button>
-        <div class="flex items-center gap-1 bg-slate-800 px-1.5 py-1 rounded-lg border border-slate-700 text-xs">
-          <span class="text-slate-400 text-[10px]">Aa</span>
-          <input type="range" id="font-slider" min="20" max="60" step="2" value="32" class="w-12 sm:w-16 accent-sky-500 cursor-pointer">
+        <div class="flex items-center gap-1 bg-slate-800 px-1.5 py-1 rounded-lg border border-slate-700 text-xs" title="Tamaño de la letra">
+          <span class="text-slate-300 text-[10px] font-semibold">Letra</span>
+          <input type="range" id="font-slider" min="20" max="72" step="2" value="32" class="w-12 sm:w-16 accent-sky-500 cursor-pointer">
           <span id="font-val" class="font-mono text-[10px] text-slate-300 w-4 text-right">32</span>
+        </div>
+        <div class="flex items-center gap-1 bg-slate-800 px-1.5 py-1 rounded-lg border border-slate-700 text-xs" title="Tamaño de los acordes">
+          <span class="text-sky-300 text-[10px] font-semibold">Acorde</span>
+          <input type="range" id="chord-slider" min="12" max="72" step="2" value="26" class="w-12 sm:w-16 accent-sky-400 cursor-pointer">
+          <span id="chord-val" class="font-mono text-[10px] text-sky-300 w-4 text-right">26</span>
         </div>
         <button id="btn-mirror-h" title="Espejo horizontal (M)" class="px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 font-mono text-xs">↔</button>
         <button id="btn-fullscreen" title="Pantalla completa (F)" class="p-1.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700">
@@ -161,7 +178,7 @@
         <div class="w-0 h-0 border-y-[12px] border-y-transparent border-l-[18px] border-l-sky-500 drop-shadow-[0_0_8px_rgba(14,165,233,0.9)]"></div>
         <div class="hidden sm:block h-[2px] w-8 bg-gradient-to-r from-sky-500 to-transparent"></div>
       </div>
-      <div class="flex-1 h-20 bg-sky-500/[0.04] border-y border-sky-500/30 reading-glow rounded"></div>
+      <div id="guide-band" class="flex-1 h-20 bg-sky-500/[0.04] border-y border-sky-500/30 reading-glow rounded"></div>
       <div id="handle-right" class="guide-drag-handle pointer-events-auto flex items-center gap-1 p-2" title="Arrastrá para mover la franja">
         <div class="hidden sm:block h-[2px] w-8 bg-gradient-to-l from-sky-500 to-transparent"></div>
         <div class="w-0 h-0 border-y-[12px] border-y-transparent border-r-[18px] border-r-sky-500 drop-shadow-[0_0_8px_rgba(14,165,233,0.9)]"></div>
@@ -279,18 +296,39 @@
             <button id="btn-forget-learned" class="text-emerald-200 underline hover:text-white">Borrar referencia</button>
           </div>
 
+          <!-- Selector de acordes -->
+          <div id="chord-picker" class="sticky top-0 z-10 bg-slate-950/95 backdrop-blur border border-sky-500/30 rounded-xl p-2 flex flex-col gap-1.5 shadow-lg">
+            <div class="flex items-center justify-between gap-2">
+              <span class="text-[10px] sm:text-[11px] text-slate-300">🎸 Tocá en la letra justo antes de la sílaba, elegí el acorde y tocá <b>Insertar</b>.</span>
+              <button id="btn-picker-toggle" class="shrink-0 text-[10px] px-2 py-0.5 rounded bg-slate-800 border border-slate-700 text-slate-300">Ocultar</button>
+            </div>
+            <div id="picker-body" class="flex flex-col gap-1.5">
+              <div class="flex flex-wrap items-center gap-1">
+                <div id="picker-roots" class="flex flex-wrap gap-1"></div>
+                <span class="w-px h-5 bg-slate-700 mx-0.5"></span>
+                <div id="picker-acc" class="flex gap-1"></div>
+              </div>
+              <div id="picker-qual" class="flex flex-wrap gap-1"></div>
+              <div class="flex items-center gap-1.5">
+                <input type="text" id="picker-free" autocomplete="off" autocapitalize="off" class="flex-1 min-w-0 px-2 py-1.5 bg-slate-900 border border-slate-700 rounded-lg text-slate-100 text-xs font-mono focus:outline-none focus:border-sky-500" placeholder="O escribilo: Fadd9, D/F#, Lam7(b5)…">
+                <button id="btn-picker-insert" class="shrink-0 px-3 py-1.5 rounded-lg bg-sky-600 hover:bg-sky-500 text-white font-bold text-xs">Insertar</button>
+              </div>
+            </div>
+          </div>
+
           <!-- Tema antiguo: texto único -->
           <div id="legacy-editor" class="hidden flex-col gap-1.5">
             <div class="flex items-center justify-between gap-2">
               <label class="text-[10px] text-slate-400">Letra con acordes entre corchetes [D] (tema cargado sin partes):</label>
               <button id="btn-convert-parts" class="text-[11px] px-2 py-1 rounded bg-slate-800 border border-slate-700 text-sky-300 hover:bg-slate-700">Cargar por partes</button>
             </div>
-            <textarea id="edit-song-content" class="w-full p-2.5 bg-slate-900 border border-slate-800 rounded-lg text-slate-100 music-font text-xs leading-relaxed focus:outline-none focus:border-sky-500 resize-y min-h-[220px]"></textarea>
+            <textarea id="edit-song-content" class="lyrics-input w-full p-2.5 bg-slate-900 border border-slate-800 rounded-lg text-slate-100 music-font text-xs leading-relaxed focus:outline-none focus:border-sky-500 resize-y min-h-[220px]"></textarea>
+            <div id="legacy-preview" class="chord-preview"></div>
           </div>
 
           <!-- Tema por partes -->
           <div id="parts-editor" class="flex flex-col gap-2">
-            <div class="text-[10px] text-slate-400">Partes en el orden en que se canta el tema. Acordes entre corchetes, por ejemplo: De [G]vez en cuando</div>
+            <div class="text-[10px] text-slate-400">Partes en el orden en que se canta el tema. Los acordes se ponen con el selector de arriba, o escritos entre corchetes o paréntesis: De [G]vez o De (Sol)vez</div>
             <div id="parts-container" class="flex flex-col gap-2"></div>
             <div class="flex items-center gap-2">
               <select id="new-part-type" class="px-2 py-1.5 bg-slate-900 border border-slate-700 rounded-lg text-slate-100 text-xs"></select>

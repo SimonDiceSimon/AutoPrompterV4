@@ -72,12 +72,18 @@ window.TP_CLOUD = {
 
 ## Cómo se usa
 
-**Pantalla principal:** igual que antes (Play, tono, acordes, guía, pedal, ventana de 20 segundos entre temas). Nuevo: el distintivo **ES / EN** muestra el idioma del tema.
+**Pantalla principal:** Play, tono, acordes, guía, pedal y ventana de 20 segundos entre temas. Además:
+- El distintivo **ES / EN** muestra el idioma del tema.
+- **Letra** y **Acorde**: dos deslizadores para elegir el tamaño de cada uno en este dispositivo.
+- **Cifrado: C / Do**: cambia entre cifrado americano (C, D, E) y latino (Do, Re, Mi). Cada dispositivo recuerda su elección.
+- La franja de lectura sigue siempre el renglón que se está cantando.
 
 **Editar la lista:** botón con el nombre de la lista.
 - Cada tema tiene título, BPM, **idioma** y guía para la banda.
 - La letra se carga **por partes**, en el orden en que se canta: Intro, Estrofa, Pre-estribillo, Estribillo, Puente, Solo, Instrumental, Interludio, Final, u **Otro** con nombre propio. Cada parte se escribe completa, aunque se repita.
-- Los acordes se escriben a mano entre corchetes: `De [G]vez en cuando`.
+- Acordes con el **selector**: tocá en la letra justo antes de la sílaba, elegí nota, ♯/♭ y tipo, y tocá **Insertar**. Para acordes raros (add9, con bajo, aumentados) escribilo en el campito del selector.
+- También se pueden escribir a mano, entre corchetes o paréntesis, aunque estén mezclados: `[G]`, `(G)`, `[Sol)`, `(Lam]`. Valen los dos cifrados.
+- Debajo de cada parte hay una **vista previa** de cómo va a quedar en pantalla.
 - Lo que se pega de afuera no se modifica.
 - Intro, Solo, Instrumental e Interludio se muestran como aviso para la banda y la voz no los sigue.
 - Los temas cargados antes quedan como estaban. Con **Cargar por partes** se pasan al formato nuevo.
@@ -90,6 +96,7 @@ window.TP_CLOUD = {
 - Escucha solo las frases de la parte actual y la siguiente, en el idioma del tema.
 - Avanza palabra por palabra y nunca retrocede. Si se pierde, se corrige a mano (pedal o tocando la palabra).
 - Durante la intro y los solos espera a que se cante.
+- **No da saltos imposibles:** solo avanza lo que se pudo cantar desde la última palabra reconocida, según el BPM del tema (como mucho 4 sílabas por pulso y 8 por segundo). Cuanto más tiempo pasa sin reconocer nada (por ejemplo, si canta el público), más lejos permite avanzar.
 - **✓ Así se canta:** aparece al terminar un tema. Si se toca, el dispositivo recuerda qué partes no llegaron a la voz (por ejemplo, un estribillo que canta el público) y la próxima vez las tiene en cuenta. Si no se toca, no aprende nada.
 
 **Atajos de teclado:** R rebobinar • V voz • M espejo • F pantalla completa • G guía • P o [ tema anterior • N o ] tema siguiente • + / − tono.

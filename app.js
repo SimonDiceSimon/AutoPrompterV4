@@ -17,7 +17,11 @@ const AUTOCUE_SECONDS = 20;
 
 const CHROMATIC = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
 const FLAT_MAP = { Db: 'C#', Eb: 'D#', Gb: 'F#', Ab: 'G#', Bb: 'A#', Cb: 'B', Fb: 'E', 'E#': 'F', 'B#': 'C' };
-const CHORD_RE = /^[A-G](#|b)?(maj|min|m|M|dim|aug|sus|add|°|ø|\+)?[0-9]*(((maj|sus|add|dim|aug|b|#|\+|-)[0-9]*)|\([^)\s]*\))*(\/[A-G](#|b)?)?$/;
+// Acordes: se aceptan en cifrado americano (C, D, E…) y latino (Do, Re, Mi…)
+const LATIN_TO_AM = { Do: 'C', Re: 'D', Mi: 'E', Fa: 'F', Sol: 'G', La: 'A', Si: 'B' };
+const AM_TO_LATIN = { C: 'Do', D: 'Re', E: 'Mi', F: 'Fa', G: 'Sol', A: 'La', B: 'Si' };
+const ROOT_RE = /^(Sol|Do|Re|Mi|Fa|La|Si|[A-G])(#|b|♯|♭)?/;
+const SUFFIX_RE = /^(maj|min|m|M|dim|aug|sus|add|°|ø|\+|-)?[0-9]*(((maj|sus|add|dim|aug|no|b|#|\+|-)[0-9]*)|\([^)\s]*\))*$/;
 
 const VOICE_LANG = { es: 'es-AR', en: 'en-US' };
 // Cada modelo está partido en pedazos de 18 MB (límite de subida de GitHub); la app los une al descargar.
@@ -73,7 +77,43 @@ function fmtDate(iso) {
   } catch (e) { return iso; }
 }
 
-function isChord(s) { return CHORD_RE.test(s); }
+function splitRoot(str) {
+  const m = ROOT_RE.exec(str);
+  if (!m) return null;
+  const acc = m[2] === '♯' ? '#' : m[2] === '♭' ? 'b' : (m[2] || '');
+  return { root: LATIN_TO_AM[m[1]] || m[1], acc, rest: str.slice(m[0].length) };
+}
+
+function isChord(s) {
+  if (!s) return false;
+  const slash = s.lastIndexOf('/');
+  let main = s, bass = null;
+  if (slash > 0) { main = s.slice(0, slash); bass = s.slice(slash + 1); }
+  const r = splitRoot(main);
+  if (!r || !SUFFIX_RE.test(r.rest)) return false;
+  if (bass !== null) { const b = splitRoot(bass); if (!b || b.rest) return false; }
+  return true;
+}
+
+// Pasa cualquier acorde (latino o americano) a americano, que es como se transpone
+function toAmerican(chord) {
+  const slash = chord.lastIndexOf('/');
+  let main = chord, bass = '';
+  if (slash > 0) { main = chord.slice(0, slash); bass = chord.slice(slash + 1); }
+  const r = splitRoot(main);
+  if (!r) return chord;
+  let out = r.root + r.acc + r.rest;
+  if (bass) { const b = splitRoot(bass); out += '/' + (b ? b.root + b.acc : bass); }
+  return out;
+}
+
+// Muestra un acorde americano en el cifrado elegido
+function toNotation(chordAm, notation) {
+  if (notation !== 'latin') return chordAm;
+  return chordAm
+    .replace(/^([A-G])/, m => AM_TO_LATIN[m])
+    .replace(/\/([A-G])/, (m, n) => '/' + AM_TO_LATIN[n]);
+}
 
 function transposeNote(n, semi) {
   const note = FLAT_MAP[n] || n;
@@ -87,6 +127,20 @@ function transposeChord(chord, semi) {
   return chord
     .replace(/^([A-G][b#]?)/, m => transposeNote(m, semi))
     .replace(/\/([A-G][b#]?)$/, (m, n) => '/' + transposeNote(n, semi));
+}
+
+// Acorde tal como se ve en pantalla: transpuesto y en el cifrado del dispositivo
+function displayChord(chord) {
+  return toNotation(transposeChord(toAmerican(chord), state.transposeSemi), state.notation);
+}
+
+// Sílabas aproximadas de una palabra (para el límite de velocidad al cantar)
+function countSyllables(word, lang) {
+  const w = (word || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z]/g, '');
+  if (!w) return 0;
+  let groups = (w.match(lang === 'en' ? /[aeiouy]+/g : /[aeiou]+/g) || []).length;
+  if (lang === 'en' && w.length > 3 && /[^aeiou]e$/.test(w)) groups--;
+  return Math.max(1, groups);
 }
 
 // Normalización para comparar lo escuchado con la letra (aproximada y por sonido)
@@ -207,6 +261,9 @@ const state = {
   audioClickEnabled: false,
   transposeSemi: 0,
   fontSize: 32,
+  chordSize: 26,
+  notation: 'american',   // 'american' (C, D, E) o 'latin' (Do, Re, Mi)
+  lastMatchTime: 0,        // última palabra confirmada (para el límite de salto)
   speed: 2.2,
   guidePosition: 32,
   mirrorH: false,
@@ -244,7 +301,7 @@ const el = {};
   'app-body', 'stage-flash-overlay', 'stage-hud', 'hud-icon', 'hud-text', 'teleprompter-content', 'scroll-wrapper',
   'teleprompter-stage', 'btn-toggle-play', 'play-icon', 'pause-icon', 'play-label', 'btn-rewind', 'metro-light',
   'bpm-display', 'btn-audio-click', 'transpose-indicator', 'btn-transpose-up', 'btn-transpose-down', 'btn-toggle-chords',
-  'btn-header-toggle-guide', 'btn-toggle-voice', 'voice-mode-label', 'mic-ping', 'mic-dot', 'font-slider', 'font-val',
+  'btn-header-toggle-guide', 'btn-toggle-voice', 'voice-mode-label', 'mic-ping', 'mic-dot', 'font-slider', 'font-val', 'chord-slider', 'chord-val', 'btn-notation', 'guide-band',
   'speed-slider', 'btn-mirror-h', 'btn-fullscreen', 'btn-exit-focus', 'progress-bar', 'band-notes-banner',
   'band-notes-text', 'btn-toggle-notes-view', 'guide-overlay', 'guide-pos-slider', 'select-active-song',
   'song-lang-badge', 'btn-prev-song', 'btn-next-song', 'btn-open-setlist', 'header-list-name', 'btn-settings',
@@ -350,7 +407,8 @@ function demoSongs() {
 // ---------------------------------------------------------------------
 function savePrefs() {
   store.set(K.prefs, {
-    fontSize: state.fontSize, speed: state.speed, guidePosition: state.guidePosition,
+    fontSize: state.fontSize, chordSize: state.chordSize, notation: state.notation,
+    speed: state.speed, guidePosition: state.guidePosition,
     showChords: state.showChords, isGuideVisible: state.isGuideVisible, engine: state.engine,
     isVoiceMode: state.isVoiceMode
   });
@@ -359,6 +417,8 @@ function savePrefs() {
 function loadPrefs() {
   const p = store.get(K.prefs, {}) || {};
   if (p.fontSize) state.fontSize = p.fontSize;
+  if (p.chordSize) state.chordSize = p.chordSize;
+  if (p.notation === 'latin' || p.notation === 'american') state.notation = p.notation;
   if (p.speed) state.speed = p.speed;
   if (p.guidePosition) state.guidePosition = p.guidePosition;
   if (typeof p.showChords === 'boolean') state.showChords = p.showChords;
@@ -549,16 +609,18 @@ function cloudStateText() {
 // ---------------------------------------------------------------------
 // Parser de letra y acordes
 // ---------------------------------------------------------------------
-function normalizeParens(text) {
-  return text.replace(/\(([^()\s]+)\)/g, (m, inner) => (isChord(inner) ? `[${inner}]` : m));
+// Acepta acordes entre corchetes o paréntesis, incluso mezclados: [Am] (Am) [Am) (Am]
+function normalizeBrackets(text) {
+  return text.replace(/[\[(]([^\[\]()\s]+)[\])]/g, (m, inner) => (isChord(inner) ? `[${inner}]` : m));
 }
 
 function parseWordSegments(token) {
   const segments = [];
+  const src = normalizeBrackets(token);
   const re = /\[([^\]]+)\]|([^[\]]+)/g;
   let m;
   let pending = null;
-  while ((m = re.exec(normalizeParens(token))) !== null) {
+  while ((m = re.exec(src)) !== null) {
     if (m[1] !== undefined) {
       if (pending) segments.push({ ...pending, text: '' });
       pending = isChord(m[1].trim()) ? { chord: m[1].trim() } : { tag: m[1].trim() };
@@ -572,8 +634,7 @@ function parseWordSegments(token) {
 }
 
 function isCueLine(trimmed) {
-  const t = normalizeParens(trimmed);
-  const full = t.match(/^\[([^\]]+)\]$/) || trimmed.match(/^\(([^)]+)\)$/);
+  const full = trimmed.match(/^\[([^\]]+)\]$/) || trimmed.match(/^\(([^)]+)\)$/);
   if (!full) return false;
   return !isChord(full[1].trim());
 }
@@ -634,7 +695,7 @@ function renderLines(text, partIndex, container, counter) {
         if (state.showChords || seg.tag) {
           const badge = document.createElement('span');
           badge.className = 'chord-badge';
-          if (seg.chord && state.showChords) badge.textContent = transposeChord(seg.chord, state.transposeSemi);
+          if (seg.chord && state.showChords) badge.textContent = displayChord(seg.chord);
           else if (seg.tag) { badge.textContent = seg.tag; badge.classList.add('tag-badge'); }
           else { badge.classList.add('invisible'); badge.innerHTML = '&nbsp;'; }
           col.appendChild(badge);
@@ -650,6 +711,7 @@ function renderLines(text, partIndex, container, counter) {
       if (key) {
         const w = {
           index: counter.n++, key, common: COMMON_WORDS[song.lang].has(baseWord(text)),
+          syl: countSyllables(text, song.lang),
           raw: text, el: wordEl, lineIdx, partIndex
         };
         wordEl.dataset.index = w.index;
@@ -688,6 +750,7 @@ function renderCurrentSong() {
   partsInfo = [];
   state.currentWordIndex = 0;
   prevHighlight = -1;
+  lastRowTop = null;
   state.isSongFinished = false;
   state.runVoicedParts = new Set();
   hide(el.btnLearnChip);
@@ -714,8 +777,8 @@ function renderCurrentSong() {
           const body = document.createElement('div');
           body.className = 'mt-1 whitespace-pre-wrap';
           body.textContent = state.showChords
-            ? txt.replace(/\[([^\]]+)\]/g, (m, c) => (isChord(c.trim()) ? transposeChord(c.trim(), state.transposeSemi) : c))
-            : txt.replace(/\[[^\]]+\]/g, m => (isChord(m.slice(1, -1).trim()) ? '' : m.slice(1, -1))).replace(/[ \t]+/g, ' ');
+            ? normalizeBrackets(txt).replace(/\[([^\]]+)\]/g, (m, c) => (isChord(c.trim()) ? displayChord(c.trim()) : c))
+            : normalizeBrackets(txt).replace(/\[[^\]]+\]/g, m => (isChord(m.slice(1, -1).trim()) ? '' : m.slice(1, -1))).replace(/[ \t]+/g, ' ');
           cue.appendChild(body);
         }
         content.appendChild(cue);
@@ -759,7 +822,7 @@ function applySpacers() {
   el.guideOverlay.style.top = `${state.guidePosition}%`;
   el.guidePosSlider.value = state.guidePosition;
 }
-window.addEventListener('resize', () => { applySpacers(); positionFocalView(state.currentWordIndex, false); });
+window.addEventListener('resize', () => { applySpacers(); positionFocalView(state.currentWordIndex, false, true); });
 
 function syncSongSelector() {
   el.selectActiveSong.innerHTML = '';
@@ -816,23 +879,19 @@ function highlightWords(target, opts = {}) {
   }
 }
 
-function positionFocalView(wordIdx, smooth) {
+// Mantiene centrado en la franja el renglón que se está cantando.
+// Solo desplaza cuando la palabra pasa a otro renglón (no se adelanta a la línea siguiente).
+let lastRowTop = null;
+function positionFocalView(wordIdx, smooth, force) {
   const w = wordObjects[wordIdx];
   if (!w) return;
+  const rowTop = w.el.offsetTop;
+  if (!force && lastRowTop !== null && Math.abs(rowTop - lastRowTop) < 4) return;
+  lastRowTop = rowTop;
   const guideY = el.scrollWrapper.clientHeight * (state.guidePosition / 100);
-  const line = lineElements[w.lineIdx];
-  let targetEl = w.el;
-  let alignTop = false;
-  if (line) {
-    const pos = line.words.indexOf(w);
-    if (pos >= Math.max(0, line.words.length - 2)) {
-      for (let n = w.lineIdx + 1; n < lineElements.length; n++) {
-        if (lineElements[n].words.length) { targetEl = lineElements[n].el; alignTop = true; break; }
-      }
-    }
-  }
-  const target = alignTop ? targetEl.offsetTop - guideY + 8 : targetEl.offsetTop - guideY + targetEl.offsetHeight / 2;
-  el.scrollWrapper.scrollTo({ top: Math.max(0, target), behavior: smooth ? 'smooth' : 'auto' });
+  const textH = state.fontSize * 1.25;
+  const textCenter = rowTop + w.el.offsetHeight - textH / 2;   // centro del texto (sin el acorde de arriba)
+  el.scrollWrapper.scrollTo({ top: Math.max(0, textCenter - guideY), behavior: smooth ? 'smooth' : 'auto' });
 }
 
 // ---------------------------------------------------------------------
@@ -1056,10 +1115,20 @@ const tracker = {
     const cur = state.currentWordIndex;
     const end = this.searchEnd();
 
+    // Límite de salto: no puede avanzar más sílabas de las que se pudieron cantar
+    // desde la última palabra confirmada. Velocidad máxima: 4 sílabas por pulso (BPM), tope 8 por segundo.
+    const now = performance.now();
+    const dt = state.lastMatchTime ? (now - state.lastMatchTime) / 1000 : 30;
+    const bpm = parseInt(song.bpm, 10);
+    const rate = bpm > 0 ? Math.min(8, (bpm / 60) * 4) : 8;
+    const maxSyl = rate * dt + 3;
+
     for (let t = toks.length - 1; t >= 0; t--) {
       let best = null;
+      let skipped = 0;
       for (let i = cur; i <= end; i++) {
         const w = wordObjects[i];
+        if (i > cur) { skipped += wordObjects[i].syl || 1; if (skipped > maxSyl) break; }
         if (w.common && i > cur + 1) continue;            // palabras comunes: solo en la posición esperada
         const s = similarity(w.key, toks[t]);
         if (!s) continue;
@@ -1074,6 +1143,7 @@ const tracker = {
         if (!best || score > best.score) best = { i, score };
       }
       if (best) {
+        if (best.i > cur) state.lastMatchTime = now;   // solo cuenta como confirmación si avanza (no por repetir palabras viejas)
         if (best.i > cur || (best.i === cur && !state.runVoicedParts.has(wordObjects[cur].partIndex))) {
           state.runVoicedParts.add(wordObjects[best.i].partIndex);
           if (best.i > cur) highlightWords(best.i);
@@ -1362,6 +1432,7 @@ function startPrompter() {
   stageFeedback('play', 'Play');
   startMetronome();
   requestWakeLock();
+  state.lastMatchTime = performance.now();
   if (state.isVoiceMode) voice.start();
   else { state.scrollPos = el.scrollWrapper.scrollTop; state.animId = requestAnimationFrame(continuousStep); }
 }
@@ -1432,6 +1503,17 @@ function applyChordsButton() {
   el.btnToggleChords.classList.toggle('bg-sky-950', state.showChords);
   el.btnToggleChords.classList.toggle('bg-slate-800', !state.showChords);
 }
+function applyNotationButton() {
+  el.btnNotation.textContent = state.notation === 'latin' ? 'Cifrado: Do' : 'Cifrado: C';
+}
+el.btnNotation.addEventListener('click', () => {
+  state.notation = state.notation === 'latin' ? 'american' : 'latin';
+  applyNotationButton();
+  savePrefs();
+  rerenderKeepingPosition(state.currentWordIndex, state.isPlaying, state.runVoicedParts);
+  if (isShown(el.setlistModal)) { renderChordPicker(); refreshAllPreviews(); }
+  showToast(state.notation === 'latin' ? 'Cifrado latino: Do, Re, Mi' : 'Cifrado americano: C, D, E');
+});
 el.btnToggleChords.addEventListener('click', () => {
   state.showChords = !state.showChords;
   applyChordsButton();
@@ -1441,13 +1523,24 @@ el.btnToggleChords.addEventListener('click', () => {
 
 function applyFontSize() {
   el.teleprompterContent.style.fontSize = `${state.fontSize}px`;
+  el.teleprompterContent.style.setProperty('--chord-size', `${state.chordSize}px`);
   el.fontVal.textContent = state.fontSize;
   el.fontSlider.value = state.fontSize;
+  el.chordVal.textContent = state.chordSize;
+  el.chordSlider.value = state.chordSize;
+  // La franja se adapta a la altura de un renglón de texto
+  el.guideBand.style.height = `${Math.round(state.fontSize * 1.6)}px`;
 }
 el.fontSlider.addEventListener('input', e => {
   state.fontSize = parseInt(e.target.value, 10);
   applyFontSize();
-  positionFocalView(state.currentWordIndex, false);
+  positionFocalView(state.currentWordIndex, false, true);
+  savePrefs();
+});
+el.chordSlider.addEventListener('input', e => {
+  state.chordSize = parseInt(e.target.value, 10);
+  applyFontSize();
+  positionFocalView(state.currentWordIndex, false, true);
   savePrefs();
 });
 el.speedSlider.addEventListener('input', e => { state.speed = parseFloat(e.target.value); savePrefs(); });
@@ -1471,7 +1564,7 @@ el.btnExitFocus.addEventListener('click', () => document.body.classList.remove('
 
 el.teleprompterContent.addEventListener('click', e => {
   const w = e.target.closest('.prompter-word');
-  if (w && w.dataset.index !== undefined) highlightWords(parseInt(w.dataset.index, 10), { fromUser: true });
+  if (w && w.dataset.index !== undefined) { highlightWords(parseInt(w.dataset.index, 10), { fromUser: true }); state.lastMatchTime = performance.now(); }
 });
 
 // Franja de lectura
@@ -1479,7 +1572,7 @@ let draggingGuide = false;
 function updateGuidePosition(percent) {
   state.guidePosition = Math.max(15, Math.min(70, Math.round(percent)));
   applySpacers();
-  positionFocalView(state.currentWordIndex, false);
+  positionFocalView(state.currentWordIndex, false, true);
   savePrefs();
 }
 [$('handle-left'), $('handle-right')].forEach(h => {
@@ -1551,6 +1644,7 @@ function openEditor() {
   const start = () => {
     state.editingIdx = Math.min(state.currentSongIndex, state.draft.length - 1);
     el.editorListName.textContent = state.list.name;
+    renderChordPicker();
     renderEditorList();
     renderSongEditor();
     updateDirty();
@@ -1658,7 +1752,7 @@ function renderSongEditor() {
   el.legacyEditor.classList.toggle('hidden', structured);
   el.legacyEditor.classList.toggle('flex', !structured);
   el.partsEditor.classList.toggle('hidden', !structured);
-  if (structured) renderPartsEditor(); else el.editSongContent.value = s.content || '';
+  if (structured) renderPartsEditor(); else { el.editSongContent.value = s.content || ''; buildPreview($('legacy-preview'), el.editSongContent.value); }
 }
 
 function partTypeOptions(select, value) {
@@ -1700,14 +1794,17 @@ function renderPartsEditor() {
     head.append(badge, sel, custom, spacer, up, down, del);
 
     const ta = document.createElement('textarea');
-    ta.className = 'w-full p-2 bg-slate-950 border border-slate-800 rounded-lg text-slate-100 music-font text-xs leading-relaxed focus:outline-none focus:border-sky-500 resize-y';
+    ta.className = 'lyrics-input w-full p-2 bg-slate-950 border border-slate-800 rounded-lg text-slate-100 music-font text-xs leading-relaxed focus:outline-none focus:border-sky-500 resize-y';
     ta.rows = Math.max(3, Math.min(12, (p.content || '').split('\n').length + 1));
-    ta.placeholder = INSTRUMENTAL_TYPES.includes(p.type) ? 'Nota para la banda (opcional). Ejemplo: Solo de guitarra, 8 compases' : 'Letra con acordes entre corchetes. Ejemplo: De [G]vez en cuando';
+    ta.placeholder = INSTRUMENTAL_TYPES.includes(p.type) ? 'Nota para la banda (opcional). Ejemplo: Solo de guitarra, 8 compases' : 'Letra. Para los acordes usá el selector de arriba, o escribilos entre corchetes o paréntesis: De [G]vez en cuando';
     ta.value = p.content || '';
 
     sel.addEventListener('change', () => { p.type = sel.value; if (p.type !== OTHER_TYPE) p.name = ''; renderPartsEditor(); updateDirty(); });
     custom.addEventListener('input', () => { p.name = custom.value; badge.textContent = custom.value || 'Parte'; updateDirty(); });
-    ta.addEventListener('input', () => { p.content = ta.value; updateDirty(); });
+    const preview = document.createElement('div');
+    preview.className = 'chord-preview';
+    buildPreview(preview, ta.value);
+    ta.addEventListener('input', () => { p.content = ta.value; updateDirty(); schedulePreview(preview, ta); });
     up.addEventListener('click', () => movePart(i, -1));
     down.addEventListener('click', () => movePart(i, 1));
     del.addEventListener('click', () => {
@@ -1715,7 +1812,7 @@ function renderPartsEditor() {
       if ((p.content || '').trim()) askConfirm('¿Quitar esta parte?', `Se quita "${names[i]}" con su letra.`, 'Quitar', doDel); else doDel();
     });
 
-    card.append(head, ta);
+    card.append(head, ta, preview);
     c.appendChild(card);
   });
 }
@@ -1744,7 +1841,7 @@ el.editSongTitle.addEventListener('input', () => { draftSong().title = el.editSo
 el.editSongBpm.addEventListener('input', () => { draftSong().bpm = parseInt(el.editSongBpm.value, 10) || 80; updateDirty(); });
 el.editSongLang.addEventListener('change', () => { draftSong().lang = el.editSongLang.value; renderEditorList(); updateDirty(); });
 el.editSongNotes.addEventListener('input', () => { draftSong().notes = el.editSongNotes.value; updateDirty(); });
-el.editSongContent.addEventListener('input', () => { draftSong().content = el.editSongContent.value; updateDirty(); });
+el.editSongContent.addEventListener('input', () => { draftSong().content = el.editSongContent.value; updateDirty(); schedulePreview($('legacy-preview'), el.editSongContent); });
 
 el.btnConvertParts.addEventListener('click', () => {
   askConfirm('¿Cargar este tema por partes?', 'Toda la letra actual pasa a una primera parte (Estrofa). Después la dividís en las partes que correspondan.', 'Cargar por partes', () => {
@@ -1754,6 +1851,145 @@ el.btnConvertParts.addEventListener('click', () => {
     renderSongEditor();
     updateDirty();
   });
+});
+
+// ---------------------------------------------------------------------
+// Vista previa de cada parte (como se va a ver en pantalla, sin transponer)
+// ---------------------------------------------------------------------
+function buildPreview(container, text) {
+  if (!container) return;
+  container.innerHTML = '';
+  const src = (text || '').replace(/\s+$/, '');
+  if (!src.trim()) return;
+  const title = document.createElement('div');
+  title.className = 'pv-title';
+  title.textContent = 'Vista previa';
+  container.appendChild(title);
+  src.split('\n').forEach(line => {
+    const trimmed = line.trim();
+    if (!trimmed) { const gap = document.createElement('div'); gap.style.height = '8px'; container.appendChild(gap); return; }
+    if (isCueLine(trimmed)) {
+      const cue = document.createElement('div'); cue.className = 'pv-cue'; cue.textContent = trimmed.replace(/^[[(]|[\])]$/g, '');
+      container.appendChild(cue); return;
+    }
+    const lineEl = document.createElement('div');
+    lineEl.className = 'pv-line';
+    trimmed.split(/\s+/).forEach(tok => {
+      const word = document.createElement('span');
+      word.className = 'pv-word';
+      parseWordSegments(tok).forEach(seg => {
+        const col = document.createElement('span'); col.className = 'pv-col';
+        const ch = document.createElement('span'); ch.className = 'pv-chord';
+        if (seg.chord) ch.textContent = toNotation(toAmerican(seg.chord), state.notation);
+        else if (seg.tag) { ch.textContent = seg.tag; ch.classList.add('pv-tag'); }
+        else ch.innerHTML = '&nbsp;';
+        const tx = document.createElement('span'); tx.textContent = seg.text || '';
+        col.append(ch, tx);
+        word.appendChild(col);
+      });
+      lineEl.appendChild(word);
+    });
+    container.appendChild(lineEl);
+  });
+}
+
+const previewTimers = new WeakMap();
+function schedulePreview(container, ta) {
+  clearTimeout(previewTimers.get(container));
+  previewTimers.set(container, setTimeout(() => buildPreview(container, ta.value), 150));
+}
+
+function refreshAllPreviews() {
+  const s = state.draft && draftSong();
+  if (!s) return;
+  if (Array.isArray(s.parts)) renderPartsEditor();
+  else buildPreview($('legacy-preview'), el.editSongContent.value);
+}
+
+// ---------------------------------------------------------------------
+// Selector de acordes
+// ---------------------------------------------------------------------
+const PICK_QUALITIES = [['', 'Mayor'], ['m', 'menor'], ['7', '7'], ['m7', 'm7'], ['maj7', 'maj7'], ['sus4', 'sus4'], ['sus2', 'sus2'], ['6', '6'], ['9', '9'], ['add9', 'add9'], ['dim', 'dim'], ['aug', 'aug']];
+const picker = { root: null, acc: '', qual: '', target: null, start: 0, end: 0 };
+
+function pickedChord() {
+  const free = $('picker-free').value.trim().replace(/^[[(]|[\])]$/g, '').trim();
+  if (free) return free;
+  if (!picker.root) return '';
+  const r = state.notation === 'latin' ? AM_TO_LATIN[picker.root] : picker.root;
+  return r + picker.acc + picker.qual;
+}
+
+function updatePickerLabel() {
+  const c = pickedChord();
+  $('btn-picker-insert').textContent = c ? `Insertar ${c}` : 'Insertar';
+}
+
+function pickerButton(label, on, onClick) {
+  const b = document.createElement('button');
+  b.type = 'button';
+  b.className = 'picker-btn' + (on ? ' on' : '');
+  b.textContent = label;
+  b.addEventListener('mousedown', e => e.preventDefault());   // no le saca el foco a la letra (computadora)
+  b.addEventListener('click', onClick);
+  return b;
+}
+
+function renderChordPicker() {
+  const roots = $('picker-roots'), accs = $('picker-acc'), quals = $('picker-qual');
+  roots.innerHTML = ''; accs.innerHTML = ''; quals.innerHTML = '';
+  ['C', 'D', 'E', 'F', 'G', 'A', 'B'].forEach(n => {
+    const label = state.notation === 'latin' ? AM_TO_LATIN[n] : n;
+    roots.appendChild(pickerButton(label, picker.root === n, () => { picker.root = picker.root === n ? null : n; $('picker-free').value = ''; renderChordPicker(); }));
+  });
+  [['#', '♯'], ['b', '♭']].forEach(([v, label]) => {
+    accs.appendChild(pickerButton(label, picker.acc === v, () => { picker.acc = picker.acc === v ? '' : v; renderChordPicker(); }));
+  });
+  PICK_QUALITIES.forEach(([v, label]) => {
+    quals.appendChild(pickerButton(label, picker.qual === v, () => { picker.qual = v; renderChordPicker(); }));
+  });
+  updatePickerLabel();
+}
+
+// Recuerda en qué letra y en qué lugar estaba el cursor
+document.addEventListener('selectionchange', () => {
+  const a = document.activeElement;
+  if (a && a.classList && a.classList.contains('lyrics-input')) {
+    picker.target = a; picker.start = a.selectionStart; picker.end = a.selectionEnd;
+  }
+});
+document.addEventListener('focusin', e => {
+  if (e.target.classList && e.target.classList.contains('lyrics-input')) picker.target = e.target;
+});
+
+function insertPickedChord() {
+  const chord = pickedChord();
+  if (!chord) { showToast('Elegí una nota (y si hace falta, el tipo de acorde)'); return; }
+  if (!isChord(chord)) { showToast(`No reconozco "${chord}" como acorde`); return; }
+  const ta = picker.target;
+  if (!ta || !document.body.contains(ta)) { showToast('Tocá primero en la letra, justo antes de la sílaba donde va el acorde'); return; }
+  const pos = Math.min(picker.start ?? ta.value.length, ta.value.length);
+  const ins = `[${chord}]`;
+  ta.value = ta.value.slice(0, pos) + ins + ta.value.slice(pos);
+  picker.start = picker.end = pos + ins.length;
+  ta.dispatchEvent(new Event('input', { bubbles: true }));
+  if (window.matchMedia && window.matchMedia('(pointer: fine)').matches) {
+    ta.focus();
+    ta.setSelectionRange(picker.start, picker.start);
+  }
+  $('picker-free').value = '';
+  updatePickerLabel();
+  showToast(`Acorde ${chord} insertado`);
+}
+
+$('btn-picker-insert').addEventListener('mousedown', e => e.preventDefault());
+$('btn-picker-insert').addEventListener('click', insertPickedChord);
+$('picker-free').addEventListener('input', updatePickerLabel);
+$('picker-free').addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); insertPickedChord(); } });
+$('btn-picker-toggle').addEventListener('click', () => {
+  const body = $('picker-body');
+  body.classList.toggle('hidden');
+  $('btn-picker-toggle').textContent = body.classList.contains('hidden') ? 'Mostrar' : 'Ocultar';
 });
 
 el.btnForgetLearned.addEventListener('click', () => {
@@ -1940,7 +2176,7 @@ function pedalDown(p, forward) {
     stageFeedback(forward ? 'forward_hold' : 'rewind_hold', forward ? 'Avance rápido' : 'Retroceso rápido');
     p.holdInt = setInterval(() => {
       const i = state.currentWordIndex + (forward ? 1 : -1);
-      if (i >= 0 && i < wordObjects.length) highlightWords(i, { fromUser: true });
+      if (i >= 0 && i < wordObjects.length) { highlightWords(i, { fromUser: true }); state.lastMatchTime = performance.now(); }
     }, 120);
   }, 450);
 }
@@ -2000,6 +2236,7 @@ async function init() {
   loadPrefs();
   applyFontSize();
   applyChordsButton();
+  applyNotationButton();
   el.speedSlider.value = state.speed;
   el.guidePosSlider.value = state.guidePosition;
   setVoiceMode(state.isVoiceMode);

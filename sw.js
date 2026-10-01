@@ -1,5 +1,5 @@
 // Service worker: guarda la app en el dispositivo para que abra sin internet.
-const APP_CACHE = 'tp-app-v4.0.1';
+const APP_CACHE = 'tp-app-v4.1.0';
 const APP_FILES = [
   './', 'index.html', 'app.css', 'app.js', 'firebase-config.js', 'manifest.json',
   'vendor/vosk.js', 'icons/icon-192.png', 'icons/icon-512.png', 'icons/icon-maskable-512.png'
