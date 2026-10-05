@@ -4,12 +4,14 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <meta name="theme-color" content="#020617">
+  <meta name="apple-mobile-web-app-title" content="AutoPrompter">
+  <meta name="application-name" content="AutoPrompter">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <title>Teleprompter Pro Studio</title>
+  <title>AutoPrompter</title>
   <link rel="manifest" href="manifest.json">
   <link rel="icon" href="icons/icon-192.png">
-  <link rel="apple-touch-icon" href="icons/icon-192.png">
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
   <link rel="stylesheet" href="app.css">
   <style>
     .app-height { height: 100vh; height: 100dvh; }
@@ -68,6 +70,15 @@
     .chord-preview .pv-tag { color: #94a3b8; }
     .chord-preview .pv-cue { color: #94a3b8; font-size: 12px; font-style: italic; }
     .chord-preview .pv-title { font-size: 10px; color: #64748b; font-weight: 600; text-transform: uppercase; letter-spacing: .08em; margin-bottom: 2px; }
+    .vdot { width: 10px; height: 10px; border-radius: 999px; display: inline-block; flex-shrink: 0; }
+    .vdot-off { background: #64748b; }
+    .vdot-loading { background: #facc15; animation: vblink 0.8s steps(2, start) infinite; }
+    .vdot-ready { background: #22c55e; }
+    .vdot-listening { background: #22c55e; animation: vpulse 1.6s ease-in-out infinite; }
+    .vdot-heard { background: #38bdf8; box-shadow: 0 0 10px #38bdf8; }
+    .vdot-error { background: #ef4444; }
+    @keyframes vblink { to { visibility: hidden; } }
+    @keyframes vpulse { 0%,100% { box-shadow: 0 0 0 0 rgba(34,197,94,0.7); } 50% { box-shadow: 0 0 0 5px rgba(34,197,94,0); } }
     .picker-btn { padding: 4px 9px; border-radius: 8px; border: 1px solid #334155; background: #0f172a; color: #e2e8f0; font-size: 12px; font-weight: 700; font-family: ui-monospace, Menlo, monospace; }
     .picker-btn.on { background: #0284c7; border-color: #38bdf8; color: #fff; }
     body.focus-mode #btn-exit-focus { display: flex !important; }
@@ -111,9 +122,10 @@
         <button id="btn-next-song" title="Tema siguiente (N o ])" class="p-1 text-slate-400 hover:text-white transition">
           <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
         </button>
-        <button id="btn-open-setlist" class="ml-1 flex items-center gap-1 px-2 sm:px-3 py-1 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs transition shadow-md shadow-indigo-950/60 active:scale-95" title="Editar la lista, exportar e importar">
-          <span>📑</span><span id="header-list-name" class="max-w-[70px] sm:max-w-[140px] truncate">Lista</span>
+        <button id="btn-open-start" class="ml-1 flex items-center gap-1 px-2 sm:px-3 py-1 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs transition shadow-md shadow-indigo-950/60 active:scale-95" title="Cambiar de lista o de banda">
+          <span>🎸</span><span id="header-list-name" class="max-w-[110px] sm:max-w-[220px] truncate">Lista</span>
         </button>
+        <button id="btn-open-setlist" class="flex items-center gap-1 px-2 py-1 rounded-lg bg-slate-700 hover:bg-slate-600 text-white font-semibold text-xs transition active:scale-95" title="Editar la lista: temas, letras y acordes">✏️<span class="hidden sm:inline">Editar</span></button>
       </div>
 
       <div class="flex items-center gap-1.5 bg-slate-800/90 px-2 py-1 rounded-lg border border-slate-700">
@@ -128,12 +140,13 @@
 
       <div class="flex flex-wrap items-center gap-1.5 sm:gap-2">
         <button id="btn-toggle-voice" class="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-sky-600 text-white font-semibold text-xs border border-sky-400/40 whitespace-nowrap">
-          <span class="relative flex h-2 w-2">
-            <span id="mic-ping" class="hidden animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-75"></span>
-            <span id="mic-dot" class="relative inline-flex rounded-full h-2 w-2 bg-slate-400"></span>
-          </span>
           <span id="voice-mode-label">Voz: ON</span>
         </button>
+        <div id="voice-status" class="flex items-center gap-1.5 px-2 py-1 rounded-lg bg-slate-800/90 border border-slate-700" title="Estado de la voz">
+          <span id="voice-dot" class="vdot vdot-off"></span>
+          <span id="voice-status-text" class="text-[10px] text-slate-300 font-semibold whitespace-nowrap">Voz apagada</span>
+          <span class="w-8 h-1.5 bg-slate-700 rounded-full overflow-hidden"><span id="mic-level" class="block h-full w-0 bg-emerald-400 transition-[width] duration-75"></span></span>
+        </div>
         <div class="flex items-center gap-1 bg-slate-800 px-1.5 py-1 rounded-lg border border-slate-700 text-xs" title="Tamaño de la letra">
           <span class="text-slate-300 text-[10px] font-semibold">Letra</span>
           <input type="range" id="font-slider" min="20" max="72" step="2" value="32" class="w-12 sm:w-16 accent-sky-500 cursor-pointer">
@@ -149,6 +162,10 @@
           <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8V4m0 0h4M4 4l5 5m11-5h-4m4 0v4m0 0l-5-5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4"/></svg>
         </button>
         <button id="btn-settings" title="Ajustes" class="px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 text-xs">⚙</button>
+        <div class="flex items-center gap-1 pl-1" title="AutoPrompter por Simón Dice">
+          <img src="icons/logo-sd.png" alt="SD" class="w-5 h-5 opacity-80 select-none" draggable="false">
+          <span id="header-version" class="font-mono text-[10px] text-slate-500"></span>
+        </div>
       </div>
     </div>
     <div class="w-full bg-slate-800 h-1">
@@ -193,10 +210,10 @@
       <span id="detected-transcript" class="text-sky-400 font-mono font-medium truncate max-w-[130px] sm:max-w-[180px]">En espera...</span>
       <button id="btn-learn-chip" class="hidden px-2 py-0.5 rounded-full bg-emerald-700 hover:bg-emerald-600 text-white text-[11px] font-bold whitespace-nowrap">✓ Así se canta</button>
       <span class="text-slate-700">|</span>
-      <span class="text-slate-400 text-[11px]">Guía:</span>
+      <span class="text-slate-400 text-[11px]">Franja:</span>
       <input type="range" id="guide-pos-slider" min="15" max="70" value="32" class="w-12 sm:w-16 accent-sky-500 h-1 cursor-pointer">
       <span class="text-slate-700">|</span>
-      <span class="text-[11px] text-slate-400">Vel:</span>
+      <span class="text-[11px] text-slate-400 whitespace-nowrap">Velocidad (voz OFF):</span>
       <input type="range" id="speed-slider" min="0.5" max="8" step="0.2" value="2.2" class="w-12 sm:w-16 accent-sky-500 h-1 cursor-pointer">
     </div>
   </main>
@@ -265,7 +282,7 @@
           <button id="btn-history" class="px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs">🕘 Historial</button>
           <button id="btn-export-setlist" class="px-2.5 py-1.5 rounded-lg bg-emerald-800 hover:bg-emerald-700 text-white text-xs">⬇ Exportar</button>
           <label class="px-2.5 py-1.5 rounded-lg bg-indigo-800 hover:bg-indigo-700 text-white text-xs cursor-pointer">⬆ Importar<input type="file" id="input-import-setlist" accept=".json,application/json" class="hidden"></label>
-          <button id="btn-change-list" class="px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs">🔁 Cambiar lista</button>
+          <button id="btn-change-list" class="px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs">🎸 Listas de la banda</button>
           <button id="btn-close-setlist" class="ml-1 text-slate-400 hover:text-white text-2xl leading-none px-1" title="Cerrar">&times;</button>
         </div>
       </div>
@@ -281,15 +298,27 @@
 
         <div class="editor-col md:col-span-8 p-3 sm:p-4 flex flex-col gap-2.5 bg-slate-950/40 md:overflow-y-auto">
           <div class="grid grid-cols-12 gap-2">
-            <input type="text" id="edit-song-title" class="col-span-12 sm:col-span-7 px-3 py-1.5 bg-slate-900 border border-slate-800 rounded-lg text-slate-100 text-xs font-semibold focus:outline-none focus:border-sky-500" placeholder="Título del tema">
-            <input type="number" id="edit-song-bpm" min="20" max="300" class="col-span-5 sm:col-span-2 px-2 py-1.5 bg-slate-900 border border-slate-800 rounded-lg text-slate-100 text-xs font-mono focus:outline-none focus:border-sky-500" placeholder="BPM">
-            <select id="edit-song-lang" class="col-span-7 sm:col-span-3 px-2 py-1.5 bg-slate-900 border border-slate-800 rounded-lg text-slate-100 text-xs focus:outline-none focus:border-sky-500">
-              <option value="es">Idioma: Español</option>
-              <option value="en">Idioma: Inglés</option>
-            </select>
+            <label class="col-span-12 sm:col-span-7 flex flex-col gap-0.5">
+              <span class="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Nombre del tema</span>
+              <input type="text" id="edit-song-title" class="px-3 py-1.5 bg-slate-900 border border-slate-800 rounded-lg text-slate-100 text-xs font-semibold focus:outline-none focus:border-sky-500" placeholder="Ej.: Campanas en la noche">
+            </label>
+            <label class="col-span-5 sm:col-span-2 flex flex-col gap-0.5">
+              <span class="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">BPM</span>
+              <input type="number" id="edit-song-bpm" min="20" max="300" class="px-2 py-1.5 bg-slate-900 border border-slate-800 rounded-lg text-slate-100 text-xs font-mono focus:outline-none focus:border-sky-500" placeholder="80">
+            </label>
+            <label class="col-span-7 sm:col-span-3 flex flex-col gap-0.5">
+              <span class="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Idioma</span>
+              <select id="edit-song-lang" class="px-2 py-1.5 bg-slate-900 border border-slate-800 rounded-lg text-slate-100 text-xs focus:outline-none focus:border-sky-500">
+                <option value="es">Español</option>
+                <option value="en">Inglés</option>
+              </select>
+            </label>
           </div>
 
-          <textarea id="edit-song-notes" class="w-full px-3 py-1.5 bg-slate-900 border border-amber-500/30 rounded-lg text-amber-200 text-xs focus:outline-none focus:border-amber-500 resize-none h-14" placeholder="Guía de banda: tono, intro, compases, entradas..."></textarea>
+          <label class="flex flex-col gap-0.5">
+            <span class="text-[10px] font-semibold text-amber-400/90 uppercase tracking-wider">Guía para la banda</span>
+            <textarea id="edit-song-notes" class="w-full px-3 py-1.5 bg-slate-900 border border-amber-500/30 rounded-lg text-amber-200 text-xs focus:outline-none focus:border-amber-500 resize-none h-14" placeholder="Tono, intro, compases, entradas..."></textarea>
+          </label>
 
           <div id="learned-row" class="hidden text-[11px] text-emerald-300 bg-emerald-950/40 border border-emerald-600/30 rounded-lg px-3 py-1.5 flex items-center justify-between gap-2">
             <span>✓ Este dispositivo tiene una referencia "Así se canta" para este tema.</span>
@@ -345,20 +374,130 @@
     </div>
   </div>
 
-  <!-- ================= ABRIR LISTA ================= -->
-  <div id="open-list-modal" class="fixed inset-0 bg-black/95 backdrop-blur-md z-[70] flex items-center justify-center p-4 hidden">
-    <div class="bg-slate-900 border border-sky-500/60 rounded-2xl p-5 sm:p-6 max-w-md w-full shadow-2xl flex flex-col gap-4">
-      <div>
-        <h4 class="text-lg font-black text-white">Abrir lista de la banda</h4>
-        <p class="text-xs text-slate-400 mt-1">Escribí el nombre de la lista (por ejemplo: Rusty Hats 001). Si no existe, se crea nueva.</p>
+  <!-- ================= INICIO: BANDAS Y LISTAS ================= -->
+  <div id="start-modal" class="fixed inset-0 bg-black z-[70] flex items-start sm:items-center justify-center p-3 sm:p-6 overflow-y-auto hidden">
+    <div class="w-full max-w-lg flex flex-col gap-4 py-4 relative">
+      <button id="btn-close-start" class="hidden absolute top-2 right-0 px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 text-xs">✕ Volver a la lista</button>
+
+      <div class="flex flex-col items-center gap-1 text-center">
+        <img src="icons/logo-simondice.png" alt="Simón Dice" class="w-40 sm:w-48 opacity-95 select-none" draggable="false">
+        <div class="text-xl sm:text-2xl font-black text-white tracking-wide">AutoPrompter</div>
+        <div class="text-[11px] text-slate-500"><span id="start-version"></span> · por Simón Dice</div>
       </div>
-      <input type="text" id="input-list-code" class="w-full px-3 py-2.5 bg-slate-950 border border-slate-700 rounded-lg text-slate-100 text-base font-semibold focus:outline-none focus:border-sky-500" placeholder="Nombre de la lista" autocomplete="off">
-      <div id="recent-lists" class="flex flex-wrap gap-1.5"></div>
-      <p id="cloud-state-open" class="text-[11px] text-slate-500"></p>
-      <div class="flex items-center justify-end gap-2">
-        <button id="btn-cancel-open-list" class="py-2 px-4 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-semibold text-xs border border-slate-700">Cancelar</button>
-        <button id="btn-confirm-open-list" class="py-2 px-5 rounded-xl bg-sky-600 hover:bg-sky-500 text-white font-bold text-xs">Abrir lista</button>
+
+      <!-- Vista 1: código de banda -->
+      <div id="start-view-bands" class="flex flex-col gap-3">
+        <button id="btn-resume" class="hidden w-full text-left px-4 py-3 rounded-xl bg-sky-700 hover:bg-sky-600 text-white shadow-lg">
+          <div class="text-[11px] uppercase tracking-wider text-sky-200 font-bold">↩ Seguir en</div>
+          <div id="resume-label" class="font-bold text-sm sm:text-base truncate"></div>
+        </button>
+        <div class="bg-slate-900 border border-slate-700 rounded-2xl p-4 flex flex-col gap-2">
+          <label for="input-band-code" class="text-xs font-semibold text-slate-300">Código de la banda</label>
+          <div class="flex gap-2">
+            <input type="text" id="input-band-code" autocomplete="off" autocapitalize="off" spellcheck="false" class="flex-1 min-w-0 px-3 py-2.5 bg-slate-950 border border-slate-700 rounded-lg text-slate-100 text-base font-semibold focus:outline-none focus:border-sky-500" placeholder="Ej.: Rusty Hats 2026">
+            <button id="btn-enter-band" class="shrink-0 px-4 py-2.5 rounded-lg bg-sky-600 hover:bg-sky-500 text-white font-bold text-sm">Entrar</button>
+          </div>
+          <p class="text-[11px] text-slate-500">Escribilo exacto, como una contraseña. Si no existe, la app te pregunta si querés crear la banda.</p>
+        </div>
+        <div id="known-bands-wrap" class="hidden flex-col gap-1.5">
+          <div class="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Abiertas en este dispositivo</div>
+          <div id="known-bands" class="flex flex-col gap-1.5"></div>
+        </div>
+        <p id="cloud-state-open" class="text-[11px] text-slate-500 text-center"></p>
       </div>
+
+      <!-- Vista 2: dentro de una banda -->
+      <div id="start-view-band" class="hidden flex-col gap-3">
+        <div class="flex items-center gap-2">
+          <button id="btn-back-bands" class="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 text-xs font-semibold">← Bandas</button>
+          <div class="min-w-0">
+            <div class="text-[10px] uppercase tracking-wider text-slate-500 font-bold">Banda</div>
+            <div id="band-title" class="text-lg font-black text-white truncate"></div>
+          </div>
+        </div>
+
+        <div class="bg-slate-900 border border-slate-700 rounded-2xl p-3 flex flex-col gap-2">
+          <div class="text-xs font-semibold text-slate-300">Listas</div>
+          <div id="band-lists" class="flex flex-col gap-1.5"></div>
+          <div class="flex gap-2 pt-1">
+            <input type="text" id="input-new-list" autocomplete="off" class="flex-1 min-w-0 px-3 py-2 bg-slate-950 border border-slate-700 rounded-lg text-slate-100 text-sm focus:outline-none focus:border-sky-500" placeholder="Nombre de la lista nueva (ej.: Show El Sótano 12/10)">
+            <button id="btn-new-list" class="shrink-0 px-3 py-2 rounded-lg bg-emerald-700 hover:bg-emerald-600 text-white font-bold text-xs">+ Nueva lista</button>
+          </div>
+        </div>
+
+        <details id="old-lists-box" class="bg-slate-900 border border-slate-700 rounded-2xl p-3">
+          <summary class="text-xs font-semibold text-slate-300 cursor-pointer">Traer lista de la versión anterior</summary>
+          <div class="flex flex-col gap-2 pt-2">
+            <div id="old-local-lists" class="flex flex-col gap-1.5"></div>
+            <div class="flex gap-2">
+              <input type="text" id="input-old-list" autocomplete="off" class="flex-1 min-w-0 px-3 py-2 bg-slate-950 border border-slate-700 rounded-lg text-slate-100 text-sm focus:outline-none focus:border-sky-500" placeholder="Nombre exacto de la lista vieja (ej.: Simon 02)">
+              <button id="btn-import-old" class="shrink-0 px-3 py-2 rounded-lg bg-slate-700 hover:bg-slate-600 text-white font-bold text-xs">Traer</button>
+            </div>
+            <p class="text-[11px] text-slate-500">Se copia adentro de esta banda. La lista vieja no se modifica.</p>
+          </div>
+        </details>
+
+        <details id="devices-box" class="bg-slate-900 border border-slate-700 rounded-2xl p-3">
+          <summary class="text-xs font-semibold text-slate-300 cursor-pointer">Dispositivos (<span id="devices-count">0 de 0</span>)</summary>
+          <div class="flex flex-col gap-2 pt-2">
+            <div id="devices-list" class="flex flex-col gap-1.5"></div>
+            <div class="flex items-center justify-between gap-2 bg-slate-950 border border-slate-800 rounded-lg px-3 py-2">
+              <span class="text-xs text-slate-300">Límite de dispositivos</span>
+              <div class="flex items-center gap-2">
+                <button id="btn-limit-down" class="w-7 h-7 rounded bg-slate-800 hover:bg-slate-700 text-sky-300 font-black">−</button>
+                <span id="devices-limit" class="font-mono text-sky-300 font-bold w-6 text-center">6</span>
+                <button id="btn-limit-up" class="w-7 h-7 rounded bg-slate-800 hover:bg-slate-700 text-sky-300 font-black">+</button>
+              </div>
+            </div>
+          </div>
+        </details>
+      </div>
+
+      <!-- Paso: crear banda -->
+      <div id="start-view-create" class="hidden flex-col gap-3 bg-slate-900 border border-amber-500/50 rounded-2xl p-4">
+        <div class="text-sm text-slate-200">No existe la banda <b id="create-band-name" class="text-amber-300"></b>. ¿Querés crearla con este código?</div>
+        <div class="flex items-center justify-between gap-2 bg-slate-950 border border-slate-800 rounded-lg px-3 py-2">
+          <span class="text-xs text-slate-300">¿Cuántos dispositivos van a usarla?</span>
+          <div class="flex items-center gap-2">
+            <button id="btn-create-limit-down" class="w-7 h-7 rounded bg-slate-800 hover:bg-slate-700 text-sky-300 font-black">−</button>
+            <span id="create-limit" class="font-mono text-sky-300 font-bold w-6 text-center">6</span>
+            <button id="btn-create-limit-up" class="w-7 h-7 rounded bg-slate-800 hover:bg-slate-700 text-sky-300 font-black">+</button>
+          </div>
+        </div>
+        <p class="text-[11px] text-slate-500">Se puede cambiar después, desde adentro de la banda.</p>
+        <div class="grid grid-cols-2 gap-2">
+          <button id="btn-create-cancel" class="py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-semibold text-xs border border-slate-700">No, me equivoqué</button>
+          <button id="btn-create-band" class="py-2.5 rounded-xl bg-amber-600 hover:bg-amber-500 text-white font-bold text-xs">Crear banda</button>
+        </div>
+      </div>
+
+      <!-- Paso: banda llena / rescate -->
+      <div id="start-view-full" class="hidden flex-col gap-3 bg-slate-900 border border-rose-500/50 rounded-2xl p-4">
+        <div class="text-sm text-slate-200"><b id="full-band-name" class="text-rose-300"></b> ya tiene <span id="full-count"></span> dispositivos, que es su límite.</div>
+        <p class="text-xs text-slate-400">Pedile a alguien de la banda que, desde su dispositivo, quite uno que no se use o sume un lugar (Dispositivos → +). Después tocá <b>Reintentar</b>.</p>
+        <button id="btn-full-retry" class="py-2.5 rounded-xl bg-sky-700 hover:bg-sky-600 text-white font-bold text-xs">Reintentar</button>
+        <div class="border-t border-slate-800 pt-3 flex flex-col gap-2">
+          <label for="input-rescue" class="text-xs text-slate-300">¿Tenés el código de rescate de la banda?</label>
+          <div class="flex gap-2">
+            <input type="text" id="input-rescue" autocomplete="off" autocapitalize="characters" spellcheck="false" class="flex-1 min-w-0 px-3 py-2 bg-slate-950 border border-slate-700 rounded-lg text-slate-100 text-sm font-mono uppercase focus:outline-none focus:border-sky-500" placeholder="R-XXXX-XXXX">
+            <button id="btn-rescue" class="shrink-0 px-3 py-2 rounded-lg bg-rose-700 hover:bg-rose-600 text-white font-bold text-xs">Usar</button>
+          </div>
+        </div>
+        <button id="btn-full-back" class="text-xs text-slate-400 underline self-start">← Volver</button>
+      </div>
+
+      <p id="start-busy" class="hidden text-center text-sm text-sky-300">Conectando…</p>
+    </div>
+  </div>
+
+  <!-- ================= CÓDIGO DE RESCATE ================= -->
+  <div id="rescue-modal" class="fixed inset-0 bg-black/95 z-[85] flex items-center justify-center p-4 hidden">
+    <div class="bg-slate-900 border-2 border-amber-500 rounded-2xl p-5 sm:p-6 max-w-md w-full shadow-2xl flex flex-col gap-4 text-center">
+      <div class="text-3xl">🔑</div>
+      <h4 class="text-base font-bold text-white">Código de rescate de la banda</h4>
+      <div id="rescue-code-show" class="font-mono text-2xl sm:text-3xl font-black text-amber-300 tracking-widest select-all"></div>
+      <p class="text-xs text-slate-300">Guardalo en un lugar seguro (una foto, una nota). Sirve para entrar a la banda desde cualquier dispositivo aunque se hayan perdido todos o se haya llenado el límite.<br><b>Se muestra una sola vez.</b></p>
+      <button id="btn-rescue-ok" class="py-2.5 rounded-xl bg-amber-600 hover:bg-amber-500 text-white font-bold text-sm">Ya lo guardé</button>
     </div>
   </div>
 
@@ -416,30 +555,35 @@
 
   <!-- ================= AJUSTES ================= -->
   <div id="settings-modal" class="fixed inset-0 bg-black/90 backdrop-blur-md z-[60] flex items-center justify-center p-4 hidden">
-    <div class="bg-slate-900 border border-slate-700 rounded-2xl p-5 max-w-md w-full shadow-2xl flex flex-col gap-4">
+    <div class="bg-slate-900 border border-slate-700 rounded-2xl p-5 max-w-md w-full shadow-2xl flex flex-col gap-4 max-h-[92vh] overflow-y-auto">
       <div class="flex items-center justify-between">
         <h4 class="text-base font-bold text-white">⚙ Ajustes de este dispositivo</h4>
         <button id="btn-close-settings" class="text-slate-400 hover:text-white text-2xl leading-none">&times;</button>
       </div>
-      <div>
-        <label class="block text-xs font-semibold text-slate-400 mb-1.5">Motor de reconocimiento de voz</label>
-        <select id="select-engine" class="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-lg text-slate-100 text-sm">
-          <option value="vosk">Vosk — sin internet (recomendado)</option>
-          <option value="google">Google — necesita internet y Chrome</option>
-        </select>
-      </div>
       <div class="space-y-2">
-        <div class="text-xs font-semibold text-slate-400">Modelos de voz sin internet (se descargan una vez)</div>
+        <div class="text-xs font-semibold text-slate-400">Voz sin internet (se descarga una sola vez)</div>
         <div class="flex items-center justify-between gap-2 bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs">
-          <span>Español <span id="model-state-es" class="text-slate-500"></span></span>
-          <button data-model="es" class="btn-preload-model px-2 py-1 rounded bg-slate-800 border border-slate-700 text-sky-300">Descargar</button>
+          <span>Español</span>
+          <span id="model-state-es" class="text-slate-400">—</span>
         </div>
         <div class="flex items-center justify-between gap-2 bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs">
-          <span>Inglés <span id="model-state-en" class="text-slate-500"></span></span>
-          <button data-model="en" class="btn-preload-model px-2 py-1 rounded bg-slate-800 border border-slate-700 text-sky-300">Descargar</button>
+          <span>Inglés</span>
+          <span id="model-state-en" class="text-slate-400">—</span>
+        </div>
+        <button id="btn-download-models" class="hidden w-full py-2 rounded-lg bg-slate-800 border border-slate-700 text-sky-300 text-xs font-semibold">Descargar ahora</button>
+      </div>
+      <div class="space-y-1.5">
+        <label for="input-device-name" class="text-xs font-semibold text-slate-400">Nombre de este dispositivo (lo ven los demás de la banda)</label>
+        <div class="flex gap-2">
+          <input type="text" id="input-device-name" maxlength="30" class="flex-1 min-w-0 px-3 py-2 bg-slate-950 border border-slate-700 rounded-lg text-slate-100 text-sm focus:outline-none focus:border-sky-500">
+          <button id="btn-save-device-name" class="shrink-0 px-3 py-2 rounded-lg bg-sky-700 hover:bg-sky-600 text-white text-xs font-bold">Guardar</button>
         </div>
       </div>
       <p id="cloud-state-settings" class="text-[11px] text-slate-500"></p>
+      <div class="flex flex-col items-center gap-1 pt-2 border-t border-slate-800">
+        <img src="icons/logo-simondice.png" alt="Simón Dice" class="w-28 opacity-80 select-none" draggable="false">
+        <div class="text-[11px] text-slate-500">AutoPrompter <span id="settings-version"></span> · por Simón Dice</div>
+      </div>
     </div>
   </div>
 

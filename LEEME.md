@@ -1,117 +1,61 @@
-# Teleprompter Pro Studio — versión 4
+# AutoPrompter — por Simón Dice
 
-App instalable (PWA) para bandas en vivo: letra con acordes, carga por partes, idioma por tema y seguimiento por voz **sin internet** (Vosk), con Google como alternativa.
+Teleprompter automático para bandas en vivo: letra con acordes, carga por partes y seguimiento por voz **sin internet**. Se instala como app en celulares, tablets y computadoras.
+
+Versión actual: ver **CAMBIOS.md**.
 
 ## Qué hay en esta carpeta
 
 | Archivo / carpeta | Para qué sirve |
 |---|---|
 | `index.html`, `app.js`, `app.css` | La app |
-| `firebase-config.js` | Datos de la nube (se completa en el paso 2) |
-| `manifest.json`, `sw.js`, `icons/` | Hacen que se instale y abra sin internet |
-| `vendor/vosk.js` | Motor de voz sin internet |
-| `models/` | Modelos de voz en español e inglés, en partes (licencia Apache 2.0 de Alpha Cephei) |
+| `firebase-config.js` | Datos de conexión a la nube (Firebase) |
+| `manifest.json`, `sw.js`, `icons/` | Instalación, funcionamiento sin internet, íconos y logos |
+| `vendor/vosk.js` | Motor de voz (funciona dentro del dispositivo) |
+| `models/` | Modelos de voz en español e inglés, partidos en pedazos (licencia Apache 2.0 de Alpha Cephei) |
+| `CAMBIOS.md` | Registro de versiones |
 
----
+## Instalar en cada dispositivo
 
-## Paso 1 — Publicarla gratis en GitHub Pages
+1. Abrir el link de la app **con internet**.
+2. **iPhone / iPad:** Compartir → **Agregar a inicio**. **Mac (Safari):** Archivo → **Agregar al Dock**. **Android / Windows (Chrome):** menú → **Instalar app**.
+3. Usarla siempre desde ese ícono. En los equipos Apple, el ícono y Safari guardan sus datos por separado: si se usan los dos, cuentan como dos dispositivos.
+4. La primera vez, la app descarga sola la voz en español e inglés (unos 75 MB, una sola vez).
 
-1. Crear una cuenta en github.com (gratis).
-2. Crear un repositorio nuevo, **público**, por ejemplo `teleprompter`.
-3. Subir **todo el contenido de esta carpeta** (no la carpeta, su contenido) con **Add file → Upload files**, arrastrando los archivos y carpetas.
-   - Los modelos de voz están partidos en pedazos de menos de 20 MB (`.part0`, `.part1`…) para que la web de GitHub los acepte. La app los une sola al descargarlos. No hay que unirlos a mano.
-4. En el repositorio: **Settings → Pages → Source: Deploy from a branch → Branch: main / (root) → Save**.
-5. En un par de minutos la app queda en `https://TU-USUARIO.github.io/teleprompter/`.
+## Bandas y listas
 
-## Paso 2 — Nube para compartir la lista (Firebase, plan gratuito)
+- Al abrir la app, siempre aparece el **código de la banda**. Se escribe exacto, como una contraseña.
+- Si el código no existe, la app pregunta si se quiere **crear la banda** y cuántos dispositivos la van a usar.
+- Al crear la banda aparece un **código de rescate**: guardarlo (foto o nota). Sirve para entrar aunque se llene el límite o se pierdan todos los dispositivos.
+- Adentro de la banda están **todas sus listas**. ⭐ marca la lista oficial (aparece primera).
+- **Dispositivos:** cada banda tiene un límite. Desde adentro se puede quitar un dispositivo que ya no se usa o sumar un lugar.
+- **Traer lista de la versión anterior:** copia adentro de la banda las listas de la v4.0/4.1.
+- **↩ Seguir en:** vuelve con un toque a la última lista usada (útil si la app se recarga en el show).
+- Para un solista: crear una "banda" propia con un código que nadie adivine.
 
-Sin este paso la app funciona igual, pero cada lista queda guardada solo en el dispositivo donde se cargó.
+## Pantalla principal
 
-1. Entrar a console.firebase.google.com → **Crear proyecto** (se puede desactivar Analytics).
-2. Menú **Compilación → Firestore Database → Crear base de datos** (ubicación sugerida: `southamerica-east1`).
-3. Pestaña **Reglas**, reemplazar todo por esto y tocar **Publicar**:
+- Botón **🎸 Banda › Lista**: cambiar de lista o de banda. Botón **✏️ Editar**: editar la lista.
+- **Indicador de voz**: 🟡 preparando · 🟢 en espera · 🔵 reconoció una palabra · 🔴 sin micrófono. La barrita al lado muestra si el micrófono escucha.
+- **Letra** y **Acorde**: tamaños por separado. **Cifrado: C / Do**: americano o latino.
+- **Franja** y **Velocidad (voz OFF)**: abajo. La velocidad solo se usa con la voz apagada.
 
-```
-rules_version = '2';
-service cloud.firestore {
-  match /databases/{database}/documents {
-    match /listas/{lista} {
-      allow read, write: if true;
-      match /historial/{version} {
-        allow read, write: if true;
-      }
-    }
-  }
-}
-```
+## Editar la lista
 
-4. **Configuración del proyecto (engranaje) → General → Tus apps → ícono web `</>`** → registrar la app.
-5. Copiar `projectId` y `apiKey` en `firebase-config.js`:
+- Cada tema: **nombre, BPM, idioma** y **guía para la banda**.
+- La letra se carga **por partes**, en el orden en que se canta (Intro, Estrofa, Pre-estribillo, Estribillo, Puente, Solo, Instrumental, Interludio, Final u Otro).
+- Acordes con el **selector** (tocar en la letra antes de la sílaba, elegir y tocar Insertar) o escritos entre corchetes o paréntesis: `[G]`, `(Sol)`, `[Lam)`.
+- Debajo de cada parte hay una **vista previa**.
+- Nada se guarda hasta tocar **💾 Guardar cambios**. Cada guardado deja la versión anterior en el **historial** (últimas 5).
 
-```js
-window.TP_CLOUD = {
-  projectId: "mi-proyecto",
-  apiKey: "AIzaSy..."
-};
-```
+## Seguimiento por voz
 
-6. Volver a subir `firebase-config.js` al repositorio.
-
-> Con estas reglas, cualquiera que conozca el nombre de una lista puede verla y modificarla. Es lo acordado (acceso por nombre de lista, sin usuarios ni contraseñas). Conviene usar nombres poco obvios, por ejemplo `Rusty Hats 001`.
-
-## Paso 3 — Instalarla en tablets y celulares
-
-1. Abrir la dirección de GitHub Pages **con internet**.
-- **Android (Chrome):** menú ⋮ → **Instalar app** o **Agregar a pantalla principal**.
-- **iPhone / iPad (Safari):** botón Compartir → **Agregar a inicio**.
-2. Escribir el nombre de la lista (por ejemplo `Rusty Hats 001`).
-3. Tocar **⚙ Ajustes → Descargar** los modelos de voz que se vayan a usar (español y/o inglés). Se descargan una sola vez.
-4. Desde ese momento abre y sigue la letra sin internet. La nube solo se usa para traer o subir cambios de la lista.
-
----
-
-## Cómo se usa
-
-**Pantalla principal:** Play, tono, acordes, guía, pedal y ventana de 20 segundos entre temas. Además:
-- El distintivo **ES / EN** muestra el idioma del tema.
-- **Letra** y **Acorde**: dos deslizadores para elegir el tamaño de cada uno en este dispositivo.
-- **Cifrado: C / Do**: cambia entre cifrado americano (C, D, E) y latino (Do, Re, Mi). Cada dispositivo recuerda su elección.
-- La franja de lectura sigue siempre el renglón que se está cantando.
-
-**Editar la lista:** botón con el nombre de la lista.
-- Cada tema tiene título, BPM, **idioma** y guía para la banda.
-- La letra se carga **por partes**, en el orden en que se canta: Intro, Estrofa, Pre-estribillo, Estribillo, Puente, Solo, Instrumental, Interludio, Final, u **Otro** con nombre propio. Cada parte se escribe completa, aunque se repita.
-- Acordes con el **selector**: tocá en la letra justo antes de la sílaba, elegí nota, ♯/♭ y tipo, y tocá **Insertar**. Para acordes raros (add9, con bajo, aumentados) escribilo en el campito del selector.
-- También se pueden escribir a mano, entre corchetes o paréntesis, aunque estén mezclados: `[G]`, `(G)`, `[Sol)`, `(Lam]`. Valen los dos cifrados.
-- Debajo de cada parte hay una **vista previa** de cómo va a quedar en pantalla.
-- Lo que se pega de afuera no se modifica.
-- Intro, Solo, Instrumental e Interludio se muestran como aviso para la banda y la voz no los sigue.
-- Los temas cargados antes quedan como estaban. Con **Cargar por partes** se pasan al formato nuevo.
-
-**Guardar:** nada se guarda hasta tocar **💾 Guardar cambios**. Si se sale con cambios sin guardar, la app pregunta. Si el dispositivo se apaga a mitad de una edición, al volver ofrece continuarla.
-
-**Historial:** cada guardado deja la versión anterior en el historial (últimas 5). **Restaurar** vuelve la lista completa a esa versión.
-
-**Seguimiento por voz:**
+- Motor único: **Vosk**, dentro del dispositivo y sin internet.
 - Escucha solo las frases de la parte actual y la siguiente, en el idioma del tema.
-- Avanza palabra por palabra y nunca retrocede. Si se pierde, se corrige a mano (pedal o tocando la palabra).
-- Durante la intro y los solos espera a que se cante.
-- **No da saltos imposibles:** solo avanza lo que se pudo cantar desde la última palabra reconocida, según el BPM del tema (como mucho 4 sílabas por pulso y 8 por segundo). Cuanto más tiempo pasa sin reconocer nada (por ejemplo, si canta el público), más lejos permite avanzar.
-- **✓ Así se canta:** aparece al terminar un tema. Si se toca, el dispositivo recuerda qué partes no llegaron a la voz (por ejemplo, un estribillo que canta el público) y la próxima vez las tiene en cuenta. Si no se toca, no aprende nada.
+- Avanza palabra por palabra, nunca retrocede, y no da saltos imposibles (según el tiempo y el BPM).
+- **✓ Así se canta:** al terminar un tema, guarda qué partes no llegaron a la voz (solo si se toca).
 
-**Atajos de teclado:** R rebobinar • V voz • M espejo • F pantalla completa • G guía • P o [ tema anterior • N o ] tema siguiente • + / − tono.
+## Para quien la mantiene
 
-## Reglamento de uso (borrador para la versión comercial)
-
-- Una sola persona edita la lista a la vez. Coordinarlo en la banda antes de editar.
-- Cada edición termina con **Guardar cambios**.
-- Antes de un show, abrir la lista con internet en cada dispositivo para tener la última versión.
-- Exportar la lista de vez en cuando como respaldo extra (**⬇ Exportar**).
-
-## Estado de las pruebas
-
-Probado en navegador (Chromium) de escritorio, tablet y celular:
-- Seguimiento con voz sintética en inglés con Vosk: sigue palabra por palabra, con ruido de fondo, y retoma si se cambian palabras de la letra.
-- Guardado, historial de 5, restaurar, borrador recuperado, pedal, apertura sin internet.
-
-**Pendiente de probar en real:** la nube de Firebase (no se pudo conectar desde el entorno de prueba), el modelo en español con voz real y el rendimiento en tablets y celulares. Para eso, la prueba con una pista de karaoke de fondo.
+- Cómo publicar una versión nueva y cómo volver a una anterior: ver la carpeta **AutoPrompter V4 Respaldos** (COMO-RESTAURAR.txt).
+- Reglas de Firebase y pasos de la v4.2: `PASOS-PARA-PUBLICAR-v4.2.txt` y `reglas-firebase-v4.2.txt` en Respaldos.
