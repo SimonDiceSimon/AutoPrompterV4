@@ -22,6 +22,8 @@ Cada versión nueva se agrega arriba de todo.
 
 **Archivos modificados:** app.js, index.html, app.css, sw.js, manifest.json, LEEME.md, CAMBIOS.md, icons/ (íconos nuevos y logos)
 
+**Publicada en GitHub Pages:** 05/10/2026 (se republicó porque la primera publicación quedó trabada en GitHub).
+
 ---
 
 ## v4.1 — 30/09/2026
